@@ -1,0 +1,2729 @@
+#!/usr/bin/env ruby
+
+################################################################
+# SCRIPT      : SHAcho {Pa,Pi,Pu,Pe,Po}co Assembler
+# VERSION     : 2.011
+# LAST UPDATE : 2009/09/28 (Mon)
+# AUTHOR      : Yoshiki Saito (shacho)
+# URL         : http://www.am.ics.keio.ac.jp/members/shacho/parthenon/shapa
+# AFFILIATION : Amano Laboratory, Department of Computer Science,
+#             :   Open and Environmental Systems, Keio University, Japan
+################################################################
+
+
+
+DEF_PARAM_FILENAME       = './poco.rb'
+DEF_DST_FILENAME         = './prg.bin'
+DEF_PC_INCR              = 2
+DEF_HEAD_FILENAME        = nil
+DEF_TAIL_FILENAME        = nil
+DEF_WITH_SRC             = true
+DEF_NUMERIC_BITNUM       = 16
+DEF_NUMERIC_SIGN         = 'signed'
+
+SOURCE_TAB_SIZE          = 4
+COMMENT_MARK             = '//'
+VERILOG_COMMENT_MARK     = '//'
+DONT_CARE_CHAR           = '0'
+
+DEF_DEBUG_MODE           = false
+DEBUG_ARCH_VARS          = false
+DEBUG_ARCH_VAR_ORDER     = false
+DEBUG_ARCH_ASM_OPCODE    = false
+DEBUG_ARCH_BIN_OPCODE    = false
+DEBUG_ARCH_VARS_TEMPLATE = false
+DEBUG_SOURCE_LINES       = false
+DEBUG_SOURCE_ERRORS      = false
+DEBUG_SOURCE_LABELS      = false
+DEBUG_SOURCE_BIN         = false
+
+
+################################################################
+#                                                              #
+#                      DO NOT EDIT BELOW                       #
+#                                                              #
+################################################################
+
+
+
+
+$arch           = nil
+
+$debug_mode     = DEF_DEBUG_MODE
+$numeric_bitnum = DEF_NUMERIC_BITNUM
+$numeric_sign   = DEF_NUMERIC_SIGN
+
+
+
+
+
+
+BIN_REGSTR             = '[01]+'
+OCT_REGSTR             = '[1-7][0-7]*'
+HEX_REGSTR             = '[0-9A-Fa-f]+'
+TOKEN_BIN_REGSTR       = '^' + BIN_REGSTR   + '$'
+TOKEN_OCT_REGSTR       = '^' + OCT_REGSTR   + '$'
+TOKEN_HEX_REGSTR       = '^' + HEX_REGSTR   + '$'
+
+H_BIN_REGSTR           = '0b' + BIN_REGSTR
+H_OCT_REGSTR           = '0'  + OCT_REGSTR
+H_HEX_REGSTR           = '0x' + HEX_REGSTR
+TOKEN_H_BIN_REGSTR     = '^' + H_BIN_REGSTR + '$'
+TOKEN_H_OCT_REGSTR     = '^' + H_OCT_REGSTR + '$'
+TOKEN_H_HEX_REGSTR     = '^' + H_HEX_REGSTR + '$'
+
+U_DEC_REGSTR           = '(?:(?:0)|(?:[1-9][0-9]*))'
+S_DEC_REGSTR           = '[+\-]?' + U_DEC_REGSTR
+TOKEN_S_DEC_REGSTR     = '^' + S_DEC_REGSTR + '$'
+TOKEN_U_DEC_REGSTR     = '^' + U_DEC_REGSTR + '$'
+
+SIGNED_REGSTR          = 's(?:i(?:g(?:n(?:ed?)?)?)?)?'
+UNSIGNED_REGSTR        = 'u(?:n(?:s(?:i(?:g(?:n(?:ed?)?)?)?)?)?)?'
+TOKEN_SIGNED_REGSTR    = '^' + SIGNED_REGSTR   + '$'
+TOKEN_UNSIGNED_REGSTR  = '^' + UNSIGNED_REGSTR + '$'
+
+RELATIVE_REGSTR        = 'r(?:e(?:l(?:a(?:t(?:i(?:ve)?)?)?)?)?)?'
+ABSOLUTE_REGSTR        = 'a(?:b(?:s(?:o(?:l(?:u(?:te)?)?)?)?)?)?'
+TOKEN_RELATIVE_REGSTR  = '^' + RELATIVE_REGSTR + '$'
+TOKEN_ABSOLUTE_REGSTR  = '^' + ABSOLUTE_REGSTR + '$'
+
+LABEL_REGSTR           = '[a-zA-Z]\w*'
+OPCODE_REGSTR          = '[a-zA-Z]\w*'
+VAR_NAME_REGSTR        = '[a-zA-Z]\w*'
+TOKEN_LABEL_REGSTR     = '^' + LABEL_REGSTR    + '$'
+TOKEN_OPCODE_REGSTR    = '^' + OPCODE_REGSTR       + '$'
+TOKEN_VAR_NAME_REGSTR  = '^' + VAR_NAME_REGSTR + '$'
+
+ANALYZE_LABEL_REGSTR   = '^\s*(?:(' + LABEL_REGSTR + ')\s*:)?'
+ANALYZE_COMMENT_REGSTR = '(?:' + COMMENT_MARK + '(.*))?$'
+ANALYZE_OPCODE_REGSTR  = '^(' + OPCODE_REGSTR + ')'
+
+OPCODE_STRS            = ['\(', '\)', '\[', '\]', "\'", "'", '\"', '"', '\#', '#',
+                          '\+', '\-', '\*', '\/', '\^', '\~', '~', '\=', '=',
+                          '\,', ',', '\.', '\;', ';', '\:', ':']
+
+
+BIN_REGEXP             = /#{BIN_REGSTR}/
+OCT_REGEXP             = /#{OCT_REGSTR}/
+HEX_REGEXP             = /#{HEX_REGSTR}/
+TOKEN_BIN_REGEXP       = /#{TOKEN_BIN_REGSTR}/
+TOKEN_OCT_REGEXP       = /#{TOKEN_OCT_REGSTR}/
+TOKEN_HEX_REGEXP       = /#{TOKEN_HEX_REGSTR}/
+
+H_BIN_REGEXP           = /#{H_BIN_REGSTR}/
+H_OCT_REGEXP           = /#{H_OCT_REGSTR}/
+H_HEX_REGEXP           = /#{H_HEX_REGSTR}/
+TOKEN_H_BIN_REGEXP     = /#{TOKEN_H_BIN_REGSTR}/
+TOKEN_H_OCT_REGEXP     = /#{TOKEN_H_OCT_REGSTR}/
+TOKEN_H_HEX_REGEXP     = /#{TOKEN_H_HEX_REGSTR}/
+
+S_DEC_REGEXP           = /#{S_DEC_REGSTR}/
+U_DEC_REGEXP           = /#{U_DEC_REGSTR}/
+TOKEN_S_DEC_REGEXP     = /#{TOKEN_S_DEC_REGSTR}/
+TOKEN_U_DEC_REGEXP     = /#{TOKEN_U_DEC_REGSTR}/
+
+LABEL_REGEXP           = /#{LABEL_REGSTR}/
+OPCODE_REGEXP          = /#{OPCODE_REGSTR}/
+VAR_NAME_REGEXP        = /#{VAR_NAME_REGSTR}/
+TOKEN_LABEL_REGEXP     = /#{TOKEN_LABEL_REGSTR}/
+TOKEN_OPCODE_REGEXP    = /#{TOKEN_OPCODE_REGSTR}/
+TOKEN_VAR_NAME_REGEXP  = /#{TOKEN_VAR_NAME_REGSTR}/
+
+SIGNED_REGEXP          = /#{SIGNED_REGSTR}/
+UNSIGNED_REGEXP        = /#{UNSIGNED_REGSTR}/
+TOKEN_SIGNED_REGEXP    = /#{TOKEN_SIGNED_REGSTR}/
+TOKEN_UNSIGNED_REGEXP  = /#{TOKEN_UNSIGNED_REGSTR}/
+
+RELATIVE_REGEXP        = /#{RELATIVE_REGSTR}/
+ABSOLUTE_REGEXP        = /#{ABSOLUTE_REGSTR}/
+TOKEN_RELATIVE_REGEXP  = /#{TOKEN_RELATIVE_REGSTR}/
+TOKEN_ABSOLUTE_REGEXP  = /#{TOKEN_ABSOLUTE_REGSTR}/
+
+ANALYZE_LABEL_REGEXP   = /#{ANALYZE_LABEL_REGSTR}/
+ANALYZE_COMMENT_REGEXP = /#{ANALYZE_COMMENT_REGSTR}/
+ANALYZE_OPCODE_REGEXP  = /#{ANALYZE_OPCODE_REGSTR}/
+
+OPCODE_SPLIT_REGEXP = /(?:(?:\$\{#{VAR_NAME_REGSTR}\})|\w|\s|(?:\\\()|(?:\\\))|(?:\[)|(?:\])|(?:\')|(?:')|(?:\")|(?:")|(?:\#)|(?:#)|(?:\+)|(?:\-)|(?:\*)|(?:\/)|(?:\^)|(?:\~)|(?:~)|(?:\=)|(?:=)|(?:\,)|(?:,)|(?:\.)|(?:\;)|(?:;)|(?:\:)|(?::)|.)/
+
+
+SCR_NAME    = 'SHAcho {Pa,Pi,Pu,Pe,Po}co Assembler'
+VERSION_NUM = '2.011'
+AUTHOR_NAME = 'Yoshiki Saito'
+MAIL_ADDR   = 'shacho__${atmark}__am.ics.keio.ac.jp'
+
+
+
+
+
+
+
+ERROR   = 'ERROR!! : '
+WARNING = 'WARNING : '
+BUG     = 'BUG     : '
+INFO    = 'INFO    : '
+DEBUG   = 'DEBUG   : '
+EMPTY   = '        : '
+USAGE   = 'USAGE   : '
+SCRIPT  = 'SCRIPT  : '
+AUTHOR  = 'AUTHOR  : '
+HISTORY = 'HISTORY : '
+LOG     = 'LOG     : '
+REPORT  = 'REPORT  : '
+
+
+
+def msg(msg_type, msg, *msgs)
+  msg_str = Array.new
+  msg_str << msg_type + msg.to_s
+  until msgs.empty?
+    msg_str << EMPTY + msgs.shift.to_s
+  end
+  return msg_str.join("\n")
+end
+
+
+def error_msg(msg, *msgs)
+  warn msg(ERROR, msg, *msgs)
+end
+
+
+def warning_msg(msg, *msgs)
+  warn msg(WARNING, msg, *msgs)
+end
+
+
+def bug_msg(msg, *msgs)
+  abort msg(BUG, msg, *msgs)
+end
+
+
+def info_msg(msg, *msgs)
+  print msg(INFO, msg, *msgs)
+end
+
+
+def debug_msg(debug_mode, msg, *msgs)
+  if debug_mode
+    print msg(DEBUG, msg, *msgs)
+  end
+end
+
+
+def log_msg(msg, *msgs)
+  print msg(LOG, msg, *msgs)
+end
+
+
+def report_msg(msg, *msgs)
+  print msg(REPORT, msg, *msgs)
+end
+
+
+def usage_msg
+  warn ''
+  warn SCRIPT + SCR_NAME + ' Ver.' + VERSION_NUM
+  warn AUTHOR + AUTHOR_NAME
+  warn ''
+  warn USAGE_STR
+  warn ''
+end
+
+
+def version_msg
+  warn ''
+  warn SCRIPT + SCR_NAME + ' Ver.' + VERSION_NUM
+  warn AUTHOR + AUTHOR_NAME
+  warn ''
+  warn INFO  + 'If you found any bugs, please inform it to Hunga-san with your source file.'
+  warn EMPTY + '  or inform me by sending an e-mail(' + MAIL_ADDR + ') by the end of 2009.'
+  warn ''
+end
+
+
+def history_msg
+  warn ''
+  warn SCRIPT + SCR_NAME + ' Ver.' + VERSION_NUM
+  warn AUTHOR + AUTHOR_NAME
+  warn ''
+  warn HISTORY_STR
+  warn ''
+end
+
+
+def empty_msg1(msg, *msgs)
+  print msg(EMPTY, msg, *msgs)
+end
+
+
+def empty_msg2(msg, *msgs)
+  warn msg(EMPTY, msg, *msgs)
+end
+
+
+
+
+
+
+HISTORY_STR = <<EOH
+HISTORY : 2009/04/14(Tue) : version 1.001 : First release.
+        : 2009/04/14(Tue) : version 1.002 : Some bugs removed, caused by applying different version of
+                                              ruby libraries in hlab and Yagami ITC.
+                          : version 1.003 : Bug removed. "-m" option not functioning properly.
+                                              All bins becomes "E"
+                          : version 1.004 : Bug removed. "-n" option not functioning properly.
+                                              Great negative nums error.
+        : 2009/04/14(Tue) : version 1.005 : Bug removed. Symbolic linked file cannot be accessed.
+        : 2009/04/21(Tue) : version 1.006 : Option "--history" provided.
+        : 2009/05/06(Wed) : version 2.001 : Scripts re-written.
+                                              Data structures changed. All arrays in parameter files changed to hashes.
+        : 2009/05/06(Wed) : version 2.002 : Radix attribute prepared for $arch.var.
+        : 2009/05/06(Wed) : version 2.003 : Table library (shalib) included.
+        : 2009/05/27(Wed) : version 2.004 : Strict Checker is ready.
+        : 2009/05/27(Wed) : version 2.005 : Parenthesis available in $arch.opcodes[:asm].
+        : 2009/05/27(Wed) : version 2.006 : Function for transfering bin to asm became avilable.
+        : 2009/06/02(Tue) : version 2.007 : Bug removed. Space required after comma in asm.
+        : 2009/06/08(Mon) : version 2.008 : Bug removed. No error message even though undeclared var is used in arch param file.
+        : 2009/07/27(Mon) : version 2.009 : 1-bit operand is now available, but must be unsigned.
+        : 2009/09/14(Mon) : version 2.010 : Option "--fpga" provided.
+        : 2009/09/28(Mon) : version 2.011 : Bug for "--fpga" option removed.
+EOH
+
+
+
+
+
+
+USAGE_STR = <<EOU
+#{USAGE} #{$0} [OPTION(s)] {SRC_FILE,ASCII(s),NUM(s)}
+        --arch PARAM_FILE  : Set parameter file name to PARAM_FILE.
+        -o DST_FILE        : Set output file name to DST_FILE.
+                           :   Default name is ENV['SHAPA_DEFOUT'] or 'a.out'.
+        -m                 : Generate mnemonic file from binary file
+                           :   Maybe useful for debugging??
+                           :   Be careful if the name of the binary file is 'a.out' and -o option is not set.
+                           :   The binary file will be overwritten.
+        -h HEAD_FILE       : Concat HEAD_FILE at the begining of the output file.
+                           :   Maybe useful for SFL??.
+        -t TAIL_FILE       : Concat TAIL_FILE at the end of the output file.
+                           :   Maybe useful for SFL??.
+        --no_src           : Generate binary file or mnemonic file with no source code commented out.
+        --fpga             : Generate binary file following to the FPGA format.
+        -n NUM(s)          : Translate NUM(s) to binary, oct, decimal and hex.
+                           :   NUM can be binary, oct, decimal or hex.
+                           :   Binary, Oct, and Hex starts from '0b', '0' and '0x', respectively.
+                           :   No assembling will be done,
+                           :   and option '--arch', '-o', '-m', '-a', '--a2b', '--a2o', '--a2d', '--a2h'
+                           :   will be ignored.
+        -b BIT_NUM         : Change default bit_num to BIT_NUM.
+                           :   Used with '-n' option for translating values
+                           :   to bin, oct, dec or hex.
+        -s signed/unsigned : Set default singed/unsigned.
+                           :   Used with '-n' option for translating values
+                           :   to bin, oct, dec or hex.
+                           :   Default setting is '#{DEF_NUMERIC_SIGN}'.
+        -a ASCII(s)        : Translate ASCII(s) to binary, oct, decimal, hex.
+                           :   No assembling will be done,
+                           :   and option '--arch', '-o', '-m' will be ignored.
+        --a2b ASCII(s)     : Translate ASCII(s) to binary.
+                           :   No assembling will be done,
+                           :   and option '--arch', '-o', '-m' will be ignored.
+        --a2o ASCII(s)     : Translate ASCII(s) to oct.
+                           :   No assembling will be done,
+                           :   and option '--arch', '-o', '-m' will be ignored.
+        --a2d ASCII(s)     : Translate ASCII(s) to decimal.
+                           :   No assembling will be done,
+                           :   and option '--arch', '-o', '-m' will be ignored.
+        --a2h ASCII(s)     : Translate ASCII(s) to hex.
+                           :   No assembling will be done,
+                           :   and option '--arch', '-o', '-m' will be ignored.
+        --addon ADDON_FILE : Load ADDON_FILE as an addon script.
+        --debug            : Set debug mode on.
+        --history          : Display history (bug reports, etc)
+        --help             : Display this message, and do nothing.
+        --version          : Display version, and do nothing.
+EOU
+
+
+
+
+
+
+
+def table_format(title, headers, tuples, opts = {})
+  ######## OPTION ERROR CHECK ##################################
+  err_msgs = ['ERROR!! : Error found in option(s) for function "table_format".']
+  if not opts.is_a? Hash
+    err_msgs << '        :   Option must be a Hash.'
+  else
+    err_msgs << '        :   :subtitle must be a String.'             if (opts.has_key? :subtitle         ) and not   opts[:subtitle         ].is_a? String
+    err_msgs << '        :   :title_line must be a char.'             if (opts.has_key? :title_line       ) and not ((opts[:title_line       ].is_a? String ) and (opts[:title_line       ].size == 1))
+    err_msgs << '        :   :table_line_top must be a char.'         if (opts.has_key? :table_line_top   ) and not ((opts[:table_line_top   ].is_a? String ) and (opts[:table_line_top   ].size == 1))
+    err_msgs << '        :   :table_line_start must be a char.'       if (opts.has_key? :table_line_start ) and not ((opts[:table_line_start ].is_a? String ) and (opts[:table_line_start ].size == 1))
+    err_msgs << '        :   :table_line_bottom must be a char.'      if (opts.has_key? :table_line_bottom) and not ((opts[:table_line_bottom].is_a? String ) and (opts[:table_line_bottom].size == 1))
+    err_msgs << '        :   :margin_top must be an Integer >= 0.'    if (opts.has_key? :margin_top       ) and not ((opts[:margin_top       ].is_a? Integer) and (opts[:margin_top       ] >= 0     ))
+    err_msgs << '        :   :margin_bottom must be an Integer >= 0.' if (opts.has_key? :margin_bottom    ) and not ((opts[:margin_bottom    ].is_a? Integer) and (opts[:margin_bottom    ] >= 0     ))
+    err_msgs << '        :   :margin_left must be an Integer >= 0.'   if (opts.has_key? :margin_left      ) and not ((opts[:margin_left      ].is_a? Integer) and (opts[:margin_left      ] >= 0     ))
+    err_msgs << '        :   :space_num must be an Integer >= 0.'     if (opts.has_key? :space_num        ) and not ((opts[:space_num        ].is_a? Integer) and (opts[:space_num        ] >= 0     ))
+    err_msgs << '        :   :inspect must be true/false.'            if (opts.has_key? :inspect          ) and not ((opts[:inspect          ] == true      ) or  (opts[:inspect          ] == false ))
+    err_msgs << '        :   :no_title must be true/false.'           if (opts.has_key? :no_title         ) and not ((opts[:no_title         ] == true      ) or  (opts[:no_title         ] == false ))
+    err_msgs << '        :   :no_headers must be true/false.'         if (opts.has_key? :no_headers       ) and not ((opts[:no_headers       ] == true      ) or  (opts[:no_headers       ] == false ))
+    err_msgs << '        :   :no_table_line must be true/false.'      if (opts.has_key? :no_table_line    ) and not ((opts[:no_table_line    ] == true      ) or  (opts[:no_table_line    ] == false ))
+  end
+  if err_msgs.size > 1
+    abort err_msgs.join("\n")
+  end
+  
+  
+  ######## OPTIONS #############################################
+  def_opts = {
+    :subtitle          => nil,
+    :title_line        => '#',
+    :table_line_top    => '-',
+    :table_line_start  => '-',
+    :table_line_bottom => '-',
+    :margin_top        => 1,
+    :margin_bottom     => 1,
+    :margin_left       => 0,
+    :space_num         => 2,
+    :inspect           => false,
+    :no_title          => false,
+    :no_headers        => false,
+    :no_table_line     => false
+  }
+  opts = def_opts.merge(opts)
+  
+  
+  ######## VAR TYPE CHECK ######################################
+  if not title.is_a? String
+    opts[:no_title] = true
+  end
+  if not headers.is_a? Array
+    return
+  end
+  headers.each do |header|
+    if not header.is_a? String
+      return
+    end
+  end
+  
+  ######## SET MARGIN STRING ###################################
+  margin_top    = "\n" * opts[:margin_top   ]
+  margin_bottom = "\n" * opts[:margin_bottom]
+  margin_left   = ' '  * opts[:margin_left  ]
+  
+  ######## SET TITLE LINE STRING ###############################
+  if opts[:no_title]
+    title_str = ''
+  else
+    title_str  = opts[:title_line] * 4 + ' ' + title + ' '
+    if title_str.length > 28
+      title_str += opts[:title_line] * 4 + "\n"
+    else
+      title_str += opts[:title_line] * (32 - title_str.length) + "\n"
+    end
+  end
+  
+  ######## SET SUBTITLE LINE STRING ############################
+  if opts[:subtitle] == nil
+    subtitle_str = ''
+  else
+    subtitle_str = opts[:subtitle] + "\n"
+  end
+  
+  ######## SET EACH COLUMN WIDTH ###############################
+  lens = Array.new
+  headers.each do |header|
+    lens << header.length
+  end
+  tuples.each do |tuple|
+    tuple.each_index do |i|
+      if i >= lens.size
+        break
+      end
+      if (tuple[i].is_a? String) and (not opts[:inspect])
+        if lens[i] < tuple[i].length
+          lens[i] = tuple[i].length
+        end
+      else
+        if lens[i] < tuple[i].inspect.length
+          lens[i] = tuple[i].inspect.length
+        end
+      end
+    end
+  end
+  
+  ######## SET HORIZONTAL LINE #################################
+  if opts[:no_table_line]
+    hor_line_top    = ''
+    hor_line_start  = ''
+    hor_line_bottom = ''
+  else
+    len_sum = 0
+    lens.each do |len|
+      len_sum += len
+    end
+    hor_line_top    = opts[:table_line_top   ] * (len_sum + (lens.size - 1) * opts[:space_num]) + "\n"
+    
+    hor_line_bottom = opts[:table_line_bottom] * (len_sum + (lens.size - 1) * opts[:space_num]) + "\n"
+    if opts[:no_headers]
+      hor_line_start  = ''
+    else
+      hor_line_start  = opts[:table_line_start ] * (len_sum + (lens.size - 1) * opts[:space_num]) + "\n"
+    end
+  end
+  
+  ######## SET HEADER LINE STRING ##############################
+  if opts[:no_header]
+    header_line_str = ''
+  else
+    header_line_strs = Array.new
+    headers.each_index do |i|
+      header_line_strs << headers[i].ljust(lens[i])
+    end
+    header_line_str = header_line_strs.join(' ' * opts[:space_num]) + "\n"
+  end
+  
+  ######## SET BODY LINE STRING ################################
+  tuple_lines = Array.new
+  tuples.each do |tuple|
+    tuple_line_strs = Array.new
+    tuple.each_index do |i|
+      if i < lens.size
+        if (tuple[i].is_a? String) and (not opts[:inspect])
+          tuple_line_strs << tuple[i].ljust(lens[i])
+        else
+          tuple_line_strs << tuple[i].inspect.ljust(lens[i])
+        end
+      else
+        if (tuple[i].is_a? String) and (not opts[:inspect])
+          tuple_line_strs << tuple[i]
+        else
+          tuple_line_strs << tuple[i].inspect
+        end
+      end
+    end
+    tuple_lines << margin_left + tuple_line_strs.join(' ' * opts[:space_num])
+  end
+  body_str = tuple_lines.join("\n") + "\n"
+  
+  ######## SET TABLE STRING ####################################
+  table_string = margin_top + title_str + subtitle_str + hor_line_top + header_line_str +
+                         hor_line_start + body_str + hor_line_bottom + margin_bottom
+end
+
+
+
+
+
+
+def num_opts(opts)
+  err_msgs = ['ERROR!! : Error found in option(s) for function "num_opts" in "shalib__numeric".']
+  if not opts.is_a? Hash
+    err_msgs << '        :   Option must be a Hash.'
+  else
+    err_msgs << '        :   :sign msut be :signed or :unsigned.'    if (opts.has_key? :sign            ) and not  (opts[:sign            ] == :signed    or   opts[:sign            ] == :unsigned)
+    err_msgs << '        :   :bitnum msut be an Integer >= 1.'       if (opts.has_key? :bitnum          ) and not  (opts[:bitnum          ].is_a? Integer and  opts[:bitnum          ] > 0         )
+    err_msgs << '        :   :warn_msg must be true/false.'          if (opts.has_key? :warn_msg        ) and not ((opts[:warn_msg        ] == true)      or  (opts[:warn_msg        ] == false    ))
+    err_msgs << '        :   :err_msg must be true/false.'           if (opts.has_key? :err_msg         ) and not ((opts[:err_msg         ] == true)      or  (opts[:err_msg         ] == false    ))
+    err_msgs << '        :   :err_overflow must be true/false.'      if (opts.has_key? :err_overflow    ) and not ((opts[:err_overflow    ] == true)      or  (opts[:err_overflow    ] == false    ))
+    err_msgs << '        :   :err_neg_unsigned must be true/false.'  if (opts.has_key? :err_neg_unsigned) and not ((opts[:err_neg_unsigned] == true)      or  (opts[:err_neg_unsigned] == false    ))
+  end
+  
+  def_opts = {
+    :sign             => :signed,
+    :bitnum           => 16,
+    :warn_msg         => false,
+    :err_msg          => false,
+    :err_overflow     => false,
+    :err_neg_unsigned => false
+  }
+  opts = def_opts.merge(opts)
+  return opts[:sign], opts[:bitnum], opts[:warn_msg], opts[:err_msg], opts[:err_overflow], opts[:err_neg_unsigned]
+end
+
+
+def to_bin(val_str, opts = {})
+  sign, bitnum, warn_msg, err_msg, err_overflow, err_neg_unsigned = num_opts(opts)
+  
+  case val_str
+  when /^0b[01]+$/
+    radix = 2
+  when /^0[0-7]+$/
+    radix = 8
+  when /^[+\-]?\d+$/
+    radix = 10
+  when /^0x[\da-fA-F]+$/
+    radix = 16
+  else
+    if err_msg
+      error_msg 'Cannot convert improper value to binary : ' + val_str
+    elsif warn_msg
+      warning_msg 'Cannot convert improper value to binary: ' + val_str
+    end
+    return 'err_improper_value'
+  end
+  
+  if opts[:err_neg_unsigned] and (sign == :unsigned) and (radix == 10) and (val_str =~ /^\-/)
+    return 'err_neg_unsigned'
+  end
+  
+  bin_str = sprintf('%0' + bitnum.to_s + 'b', val_str)
+  if bin_str =~ /\.\./                                          # yagami itc
+    bin_str.sub!(/^.*\.\./, '')                                 # yagami itc
+    bin_str = bin_str.rjust(bitnum)                             # yagami itc
+    bin_str =~ /^(\s*)(0|1)/                                    # yagami itc
+    space_len = $1.length                                       # yagami itc
+    msb_val = $2                                                # yagami itc
+    bin_str.sub!(' ' * space_len, msb_val * space_len)          # yagami itc
+  end                                                           # yagami itc
+  
+  overflow = false
+  if bin_str.length > bitnum
+    overflow = true
+  end
+  if (sign == :signed) and (radix == 10) and (val_str !~ /^-/) and (bin_str =~ /^1/)
+    overflow = true
+  end
+  if overflow
+    if err_msg
+      warning_msg 'Bit overflowed: ' + val_str + ' -> ' + bin_str
+    elsif warn_msg
+      warning_msg 'Bit overflowed: ' + val_str + ' -> ' + bin_str
+    end
+    if err_overflow
+      return 'err_bit_overflow'
+    end
+  end
+  
+  return bin_str
+end
+
+
+def to_oct(val_str, opts = {})
+  sign, bitnum, warn_msg, err_msg, err_overflow, err_neg_unsigned = num_opts(opts)
+  bin_str = to_bin(val_str, :sign    => sign,    :bitnum       => bitnum,       :warn_msg         => warn_msg,
+                            :err_msg => err_msg, :err_overflow => err_overflow, :err_neg_unsigned => err_neg_unsigned)
+  if bin_str =~ /^err_/
+    return bin_str
+  end
+  bin_str = '0b' + bin_str
+  oct_str = sprintf('%0' + (bitnum / 3.0).ceil.to_s + 'o', bin_str)
+  
+  return oct_str
+end
+
+
+def to_dec(val_str, opts = {})
+  sign, bitnum, warn_msg, err_msg, err_overflow, err_neg_unsigned = num_opts(opts)
+  bin_str = to_bin(val_str, :sign    => sign,    :bitnum       => bitnum,       :warn_msg         => warn_msg,
+                            :err_msg => err_msg, :err_overflow => err_overflow, :err_neg_unsigned => err_neg_unsigned)
+  if bin_str =~ /^err_/
+    return bin_str
+  end
+  bin_str = '0b' + bin_str
+  
+  if (sign == :signed) and (bin_str =~ /^0b1/)
+    bin_min1_str = sprintf('%0' + bitnum.to_s + 'b', (bin_str.oct - 1))
+    inv_bin_str  = bin_min1_str.gsub(/1/, '2')
+    inv_bin_str.gsub!(/0/, '1')
+    inv_bin_str  = '0b' + inv_bin_str.gsub(/2/, '0')
+    dec_str      = sprintf('-%d', inv_bin_str)
+  else
+    dec_str = sprintf('%d', bin_str)
+  end
+  
+  return dec_str
+end
+
+
+def to_hex(val_str, opts = {})
+  sign, bitnum, warn_msg, err_msg, err_overflow, err_neg_unsigned = num_opts(opts)
+  bin_str = to_bin(val_str, :sign    => sign,    :bitnum       => bitnum,       :warn_msg         => warn_msg,
+                            :err_msg => err_msg, :err_overflow => err_overflow, :err_neg_unsigned => err_neg_unsigned)
+  if bin_str =~ /^err_/
+    return bin_str
+  end
+  bin_str = '0b' + bin_str
+  hex_str = sprintf('%0' + (bitnum / 4.0).ceil.to_s + 'X', bin_str)
+  
+  return hex_str
+end
+
+
+def numeric_table_format(num_ary, bitnum, sign)
+  if not num_ary.is_a? Array
+    warn 'ERROR!! : Parameters for function "numeric_table_format" not proper.'
+    warn '        :   num_ary must be an Array of String (/\d+/)'
+    return
+  end
+  if num_ary.size == 0
+    return
+  end
+  
+  header = ['num', 'bin', 'oct', 'dec', 'hex']
+  rows = Array.new
+  num_ary.each do |num|
+    bin = to_bin(num, :bitnum => bitnum, :sign => sign, :warn_msg => false, :err_msg => false, :err_overflow => false, :err_neg_unsigned => false)
+    oct = to_oct(num, :bitnum => bitnum, :sign => sign, :warn_msg => false, :err_msg => false, :err_overflow => false, :err_neg_unsigned => false)
+    dec = to_dec(num, :bitnum => bitnum, :sign => sign, :warn_msg => false, :err_msg => false, :err_overflow => false, :err_neg_unsigned => false)
+    hex = to_hex(num, :bitnum => bitnum, :sign => sign, :warn_msg => false, :err_msg => false, :err_overflow => false, :err_neg_unsigned => false)
+    row = [num, bin, oct, dec, hex]
+    row.each_index do |i|
+      if row[i] =~ /^err_/
+        row[i] = ''
+        
+      end
+    end
+    if row[1] == ''
+      row << 'Improper value!!'
+    else
+      if bin.length > bitnum
+        row << 'Overflowed!!'
+      end
+      if (sign == :unsigned) and (num =~ /^\-/)
+        row << 'Not unsigned value!!'
+      end
+    end
+    rows << row
+  end
+  return table_format(nil, header, rows, :subtitle => bitnum.to_s + 'bit', :inspect => false)
+end
+
+
+
+
+
+
+def str2bins(str)
+  num_ary = Array.new
+  str.length.times do |i|
+    num_ary << str[i]
+  end
+  return num_ary
+end
+
+
+def ascii2num_table_format(strs, opts = {})
+  return if     strs.empty?
+  return if not strs.is_a? Array
+  
+  ######## OPTION ERROR CHECK ##################################
+  err_msgs = ['ERROR!! : Error found in option(s) for function "ascii2num_table_format".']
+  if not opts.is_a? Hash
+    err_msgs << '        :   Option must be a Hash.'
+  else
+    err_msgs << '        :  :bin must be true/false.'  if (opts.has_key? :bin) and not ((opts[:bin] == true) or (opts[:bin] == false))
+    err_msgs << '        :  :oct must be true/false.'  if (opts.has_key? :oct) and not ((opts[:oct] == true) or (opts[:oct] == false))
+    err_msgs << '        :  :dec must be true/false.'  if (opts.has_key? :dec) and not ((opts[:dec] == true) or (opts[:dec] == false))
+    err_msgs << '        :  :hex must be true/false.'  if (opts.has_key? :hex) and not ((opts[:hex] == true) or (opts[:hex] == false))
+  end
+  if err_msg.size > 1
+    abort err_msgs.join("\n")
+  end
+  
+  
+  def_opts = {:bin => true, :oct => true, :dec => true, :hex => true}
+  opts = def_opts.merge(opts)
+  
+  bin_ary = Array.new
+  oct_ary = Array.new
+  dec_ary = Array.new
+  hex_ary = Array.new
+  
+  strs.each do |str|
+    if not str.is_a? String
+      next
+    else
+      chars   = str2bins(str)
+      bin_str = Array.new
+      oct_str = Array.new
+      dec_str = Array.new
+      hex_str = Array.new
+      chars.each do |char|
+        bin_str << sprintf('%08b', char)
+        oct_str << sprintf('%03o', char)
+        dec_str << sprintf('%d',   char)
+        hex_str << sprintf('%02x', char)
+      end
+      bin_ary << bin_str.join(' ')
+      oct_ary << oct_str.join(' ')
+      dec_ary << dec_str.join(' ')
+      hex_ary << hex_str.join(' ')
+    end
+  end
+  
+  ascii_table = Array.new
+  strs.each do |str|
+    if str.is_a? String
+      ascii_table << table_format('', ['radix', 'ascii code'],
+                                  [['bin', bin_ary.shift], ['oct', oct_ary.shift], ['dec', dec_ary.shift], ['hex', hex_ary.shift]],
+                                  :subtitle => '[' + str + ']', :inspect => false, :no_title => true)
+    else
+      ascii_table << ''
+      ascii_table << str.inspect + ':: Not a String.'
+      ascii_table << ''
+    end
+  end
+  return ascii_table.join
+end
+
+
+
+
+
+
+class OptParser
+  def initialize(single_opts, *long_opts)
+    @reg_single_opts   = Array.new
+    @reg_char_opts     = Hash.new
+    @reg_string_opts   = Hash.new
+    @reg_improper_opts = Array.new
+    @opts              = Hash.new
+    
+    reg_single_opts(single_opts)
+    reg_char_opts(long_opts)
+    reg_string_opts(long_opts)
+    rm_dup_opts
+    reset
+    
+    if @reg_improper_opts.size > 0
+      warn 'WARNING : Tried to register following improper options and was ignored: '
+      warn '        :   ' + @reg_improper_opts.join(', ')
+    end
+  end
+  
+  
+  def reg_single_opts(single_opts)
+    return if single_opts == nil or single_opts == ''
+    
+    single_opts.each_byte do |opt|
+      opt = opt.chr
+      if opt =~ /^[a-zA-Z]$/
+        @reg_single_opts   << opt
+      else
+        @reg_improper_opts << opt
+      end
+    end
+  end
+  
+  
+  def reg_char_opts(long_opts)
+    return if long_opts.empty?
+    
+    long_opts.delete_if do |opt|
+      if opt =~ /^[a-zA-Z](:)?$/
+        param = ($1 == ':')
+        opt.sub!(/:$/, '')
+        @reg_char_opts[opt] = param
+        true
+      else
+        false
+      end
+    end
+  end
+  
+  def reg_string_opts(long_opts)
+    return if long_opts.empty?
+    
+    long_opts.delete_if do |opt|
+      if opt =~ /^[a-zA-Z][\w\-]+(:)?$/
+        param = ($1 == ':')
+        opt.sub!(/:$/, '')
+        @reg_string_opts[opt] = param
+        true
+      else
+        false
+      end
+    end
+    
+    long_opts.each do |opt|
+      @reg_improper_opts << opt
+    end
+  end
+  
+  
+  def rm_dup_opts
+    @reg_single_opts.delete_if do |opt|
+      @reg_char_opts.has_key? opt
+    end
+  end
+  
+  
+  def reset
+    @opts = Hash.new
+    
+    @reg_single_opts.each do |opt|
+      @opts[opt] = Array.new
+    end
+    
+    @reg_char_opts.each_key do |opt|
+      @opts[opt] = Array.new
+    end
+    
+    @reg_string_opts.each_key do |opt|
+      @opts[opt] = Array.new
+    end
+  end
+  
+  
+  def analyze(argv)
+    argv_dup = argv.dup
+    analyze_string_opts(argv_dup)
+    analyze_char_opts(argv_dup)
+    analyze_single_opts(argv_dup)
+    
+    return @opts
+  end
+  
+  
+  def analyze!(argv)
+    analyze_string_opts(argv)
+    analyze_char_opts(argv)
+    analyze_single_opts(argv)
+    
+    return @opts
+  end
+  
+  
+  def analyze_string_opts(argv)
+    return if @reg_string_opts.empty?
+    
+    i = 0
+    while i < argv.size
+      if argv[i] =~ /^--/
+        opt = argv[i].sub(/^--/, '')
+        case @reg_string_opts[opt]
+        when true
+          if argv[i + 1] != nil
+            @opts[opt] << argv[i + 1]
+            argv.delete_at(i)
+            argv.delete_at(i)
+          else
+            i += 1
+          end
+        when false
+          @opts[opt] << true
+          argv.delete_at(i)
+        else
+          i += 1
+        end
+      else
+        i += 1
+      end
+    end
+    
+    return
+  end
+  
+  
+  def analyze_char_opts(argv)
+    return if argv.empty?
+    
+    i = 0
+    while i < argv.size
+      if argv[i] =~ /^\-\w/
+        opts = argv[i].sub(/^\-/, '')
+        j = 0
+        while j < opts.length
+          opts_char = opts[j].chr
+          case @reg_char_opts[opts_char]
+          when true
+            opts =~ /#{opts_char}(.+)$/
+            param = $1
+            if param == nil
+              param = argv[i + 1]
+              argv.delete_at(i + 1)
+            end
+            if param == nil
+              break
+            end
+            @opts[opts_char] << param
+            opts.sub!(/#{opts_char}.*$/, '')
+          when false
+            @opts[opts_char] << true
+            opts.sub!(opts_char, '')
+          else
+            j += 1
+          end
+        end
+        
+        argv[i] = '-' + opts
+      end
+      i += 1
+    end
+    
+    argv.delete_if do |arg|
+      arg == '-'
+    end
+    
+    return
+  end
+  
+  
+  def analyze_single_opts(argv)
+    return if argv.empty?
+    
+    i = 0
+    while i < argv.size
+      if argv[i] =~ /^\-\w/
+        opt = argv[i].sub(/^\-/, '')
+        
+        j = 0
+        while j < opt.length
+          opt_char = opt[j].chr
+          if @reg_single_opts.include? opt_char
+            @opts[opt_char] << true
+            opt.sub!(opt_char, '')
+          else
+            j += 1
+          end
+        end
+        argv[i] = '-' + opt
+      end
+      i += 1
+    end
+    
+    argv.delete_if do |arg|
+      arg == '-'
+    end
+    
+    return
+  end
+end
+
+
+
+
+
+
+
+class Arch
+  attr_reader :name, :vars, :opcodes, :pc_incr, :line_bitnum, :vars_template, :allow_symbols_for_operands
+  
+  ######## INITIALIZE ##########################################
+  def initialize(name, param_filename)
+    @error          = false
+    @name           = name
+    @param_filename = param_filename
+    @vars           = Hash.new
+    @opcodes        = Hash.new
+    @pc_incr        = DEF_PC_INCR
+    @line_bitnum    = 0
+    @vars_template  = Hash.new
+    @allow_symbols_for_operands = false
+  end
+  
+  
+  def absolute_branch_address(cur_pc, dst_pc)
+    return false
+  end
+  
+  
+  def relative_branch_address(cur_pc, dst_pc)
+    return false
+  end
+  
+  
+  ######## ANALYZE #############################################
+  def is_opcode(opcode)
+    return @opcodes.include?(opcode)
+  end
+  
+  
+  ######## SET ATTRIBUTE #######################################
+  def set_attr(exec_mode)
+    debug_output_vars
+    debug_output_asm_opcodes
+    debug_output_bin_opcodes
+    set_var_order
+    check_var_declaration
+    exit if @error
+    debug_output_var_order
+    set_line_bitnum
+    check_var_duplication
+    check_var_contradiction
+    set_vars_template
+    debug_output_vars_template
+    set_asm_attr
+    set_bin_attr
+    check_bin_regstr_duplication
+    exit if @error
+    
+    debug_output_asm_opcodes
+    debug_output_bin_opcodes
+  end
+  
+  
+  # check if all opcodes.bin has the same bit length
+  #       each $arch.opcodes[:bin] has proper format
+  #       vars used in $arch.opcodes are declared in $arch.vars
+  def set_line_bitnum
+    debug_msg $debug_mode, 'Setting line_bitnum' + "\n"
+    
+    line_bitnums = Hash.new
+    unknown_vars = Array.new
+    @opcodes.each do |opcode, attr|
+      bin = attr[:bin].dup
+      vars = bin.scan(/\$\{#{VAR_NAME_REGSTR}\}/)
+      vars.each do |var_name|
+        var_name.sub!(/^\$\{/, '')
+        var_name.sub!(/\}$/, '')
+        if @vars.include? var_name
+          bitnum = @vars[var_name][:bitnum]
+          bin.gsub!('${' + var_name + '}', '0' * bitnum)
+        else
+          unknown_vars << var_name
+        end
+      end
+      bin.gsub!('_', '')
+      bin.gsub!(/\s/, '')
+      bin.gsub!('x', '0')
+      
+      if bin =~ /^[01]+$/
+        line_bitnums[opcode] = bin.count('01')
+      else
+        line_bitnums[opcode] = :format_error
+      end
+    end
+    
+    if unknown_vars.size != 0
+      unknown_vars.uniq!
+      error_msg 'Following var(s) used in $arch.opcodes not declared.'
+      empty_msg2 '  ' + unknown_vars.join(', ')
+      @error       = true
+      @line_bitnum = nil
+      return
+    end
+    
+    if line_bitnums.has_value? :format_error
+      error_opcodes = Array.new
+      line_bitnums.each do |opcode, bitnum|
+        if not bitnum.is_a? Integer
+          error_opcodes << '@opcodes[\'' + opcode + '\'][:bin]'
+        end
+      end
+      error_msg 'Improper binary format found.'
+      empty_msg2 '  Check $arch.opcodes parameters in "' + @param_filename + '".'
+      empty_msg2 '  For example, ' + error_opcodes.join(', ')
+      @error       = true
+      @line_bitnum = nil
+    end
+    
+    uniq_bitnums = Hash.new
+    line_bitnums.each do |opcode, bitnum|
+      if not uniq_bitnums.has_value? bitnum
+        uniq_bitnums[opcode] = bitnum
+      end
+    end
+    if uniq_bitnums.size != 1
+      mismatch_opcodes = Array.new
+      uniq_bitnums.each do |opcode, bitnum|
+        mismatch_opcodes << '@opcodes[\'' + opcode + '\'][:bin] (=' + bitnum.to_s + 'bits)'
+      end
+      warning_msg 'Binary bitnum mismatched.'
+      empty_msg2 '  Check $arch.opcodes parameters in "' + @param_filename + '".'
+      empty_msg2 '  For example, compare ' + mismatch_opcodes.join(', ')
+    end
+    
+    @line_bitnum = line_bitnums.values.first
+    debug_msg $debug_mode, '  line bitnum = ' + @line_bitnum.to_s + "\n"
+  end
+  
+  
+  def check_var_declaration
+    debug_msg $debug_mode, 'Checking var declaration' + "\n"
+    
+    unknown_vars = Array.new
+    @opcodes.each do |opcode, attr|
+      attr[:asm_var_order].each do |var|
+        if not @vars.has_key?(var)
+          unknown_vars << var
+        end
+      end
+      attr[:bin_var_order].each do |var|
+        if not @vars.has_key?(var)
+          unknown_vars << var
+        end
+      end
+    end
+    
+    if unknown_vars.size > 0
+      unknown_vars.uniq!
+      error_msg 'Undeclared var(s) used in $arch.opcodes[:asm] or $arch.opcodes[:bin]'
+      empty_msg2 '  Check @opcodes parameter(s) in "' + @param_filename + '".'
+      empty_msg2 '  For example, ' + unknown_vars.join(', ')
+      @error = true
+    end
+  end
+  
+  # check if each vars are not used in the same opcodes.asm or opcodes.bin
+  def check_var_duplication
+    debug_msg $debug_mode, 'Checking var duplication' + "\n"
+    
+    error_msgs = Array.new
+    @opcodes.each do |opcode, attr|
+      if attr[:asm_var_order].uniq.size != attr[:asm_var_order].size
+        error_msgs << '@opcodes[\'' + opcode + '\'][:asm]'
+      end
+      if attr[:bin_var_order].uniq.size != attr[:bin_var_order].size
+        error_msgs << '@opcodes[\'' + opcode + '\'][:bin]'
+      end
+    end
+    
+    if error_msgs.size > 0
+      error_msg 'Vars used in $arch.opcodes[:asm] or $arch.opcodes[:bin]'
+      empty_msg2 '  cannot be used more than once for the same opcode.'
+      empty_msg2 '  Check @opcodes parameter(s) in "' + @param_filename + '".'
+      empty_msg2 '  For example, ' + error_msgs.join(', ')
+      @error = true
+    else
+      debug_msg $debug_mode, '  No var duplication found.' + "\n"
+    end
+  end
+  
+  
+  # check if the vars used for each opcode.asm are the same as corresponding opcode.bin
+  def check_var_contradiction
+    debug_msg $debug_mode, 'Checking var contradiction' + "\n"
+    
+    error_msgs = Array.new
+    @opcodes.each do |opcode, attr|
+      asm_vars = attr[:asm].scan(/\$\{#{VAR_NAME_REGSTR}\}/).sort
+      bin_vars = attr[:bin].scan(/\$\{#{VAR_NAME_REGSTR}\}/).sort
+      if not asm_vars.eql? bin_vars
+        error_msgs << '@opcodes[\'' + opcode + '\']'
+      end
+    end
+    
+    if error_msgs.size > 0
+      error_msg 'Vars used in $arch.opcodes[:asm] and $arch.opcodes[:bin] must be the same.'
+      empty_msg2 '  Check $arch.opcodes parameter(s) in "' + @param_filename + '".'
+      empty_msg2 '  For example, ' + error_msgs.join(', ')
+      @error = true
+    else
+      debug_msg $debug_mode, '  No var contradiction found.' + "\n"
+    end
+  end
+  
+  
+  # check if all opcode.bin are unique
+  #   opcodes.asm is always unique, since opcode_keys are all unique
+  def check_bin_regstr_duplication
+    debug_msg $debug_mode, 'Checking $arch.opcodes[:bin_regexp] duplication.' + "\n"
+    
+    bin_regstrs = Hash.new
+    @opcodes.each do |opcode, attr|
+      bin_regstrs[opcode] = attr[:bin_regstr].gsub(/\(|\)/, '')
+    end
+    
+    if bin_regstrs.keys.uniq.size != bin_regstrs.values.uniq.size
+      bin_regstrs_cp = bin_regstrs.dup
+      error_opcodes = Hash.new
+      bin_regstrs.each do |opcode, bin_regstr|
+        bin_regstrs_cp.delete(opcode)
+        if (bin_regstrs_cp.has_value? bin_regstr) or (error_opcodes.has_value? bin_regstr)
+          error_opcodes[opcode] = bin_regstr
+        end
+      end
+      error_opcodes = error_opcodes.keys
+      error_points  = Array.new
+      error_opcodes.each do |opcode|
+        error_points << '@opcodes[\'' + opcode + '\'][:bin]'
+      end
+      
+      error_msg 'Binary format for each opcode must be unique.'
+      empty_msg2 '  Check $arch.opcodes parameters in "' + @param_filename + '".'
+      empty_msg2 '  For example, ' + error_points.join(', ')
+      @error =true
+    else
+      debug_msg $debug_mode, '  No opcodes.bin_regexp duplication found.' + "\n"
+    end
+  end
+  
+  
+  def set_var_order
+    debug_msg $debug_mode, 'Setting var order.' + "\n"
+    
+    @opcodes.each do |opcode, attr|
+      attr[:asm_var_order] = Array.new
+      vars = attr[:asm].scan(/\$\{#{VAR_NAME_REGSTR}\}/)
+      vars.each do |var|
+        var_name = var.sub('${', '')
+        var_name.sub!('}', '')
+        attr[:asm_var_order] << var_name
+      end
+      
+      attr[:bin_var_order] = Array.new
+      vars = attr[:bin].scan(/\$\{#{VAR_NAME_REGSTR}\}/)
+      vars.each do |var|
+        var_name = var.sub('${', '')
+        var_name.sub!('}', '')
+        attr[:bin_var_order] << var_name
+      end
+    end
+  end
+  
+  
+  def set_vars_template
+    debug_msg $debug_mode, 'Setting var templates' + "\n"
+    
+    @opcodes.each do |opcode, attr|
+      @vars_template[opcode] = Hash.new
+      attr[:asm_var_order].each do |var|
+        @vars_template[opcode][var] = nil
+      end
+    end
+  end
+  
+  
+  def set_asm_attr
+    debug_msg $debug_mode, 'Analyzing "' + @name + '" parameters for setting asm attributes' + "\n"
+    
+    @opcodes.each do |opcode, attr|
+      asm_regstr = attr[:asm].dup
+      asm_regstr.gsub!(/\s/, '')
+      asm_regstr = asm_regstr.scan(/(?:\$\{#{VAR_NAME_REGSTR}\})|(?:\\.)|(?:.)/).join('\s*')
+      
+      var_names = asm_regstr.scan(/\$\{#{VAR_NAME_REGSTR}\}/)
+      var_names.each do |var_name|
+        var_name.sub!('${', '')
+        var_name.sub!('}',   '')
+        radix = @vars[var_name][:asm_radix]
+        sign  = @vars[var_name][:sign     ]
+        label = @vars[var_name][:label    ]
+        case radix
+        when 2
+          var_regstr = '(?:' + H_BIN_REGSTR + ')'
+        when 8
+          var_regstr = '(?:' + H_OCT_REGSTR + ')'
+        when 10
+          case sign
+          when TOKEN_SIGNED_REGEXP
+            var_regstr = '(?:' + S_DEC_REGSTR + ')'
+          when TOKEN_UNSIGNED_REGEXP
+            var_regstr = '(?:' + U_DEC_REGSTR + ')'
+          end
+        when 16
+          var_regstr = '(?:' + H_HEX_REGSTR + ')'
+        else
+          case sign
+          when TOKEN_SIGNED_REGEXP
+            var_regstr  =  '(?:' + H_BIN_REGSTR + ')|(?:' + H_OCT_REGSTR + ')|(?:' + S_DEC_REGSTR + ')|(?:' + H_HEX_REGSTR + ')'
+          when TOKEN_UNSIGNED_REGEXP
+            var_regstr  =  '(?:' + H_BIN_REGSTR + ')|(?:' + H_OCT_REGSTR + ')|(?:' + U_DEC_REGSTR + ')|(?:' + H_HEX_REGSTR + ')'
+          end
+        end
+        if label
+          var_regstr += '|(?:' + LABEL_REGSTR + ')'
+        end
+        var_regstr = '(' + var_regstr + ')'
+        asm_regstr.sub!('${' + var_name + '}', var_regstr)
+      end
+      asm_regstr = '^' + asm_regstr + '$'
+      attr[:asm_regstr] = asm_regstr
+      attr[:asm_regexp] = /#{asm_regstr}/
+    end
+  end
+  
+  
+  def set_bin_attr
+    debug_msg $debug_mode, 'Analyzing "' + @name + '" parameters for setting bin attributes' + "\n"
+    
+    @opcodes.each do |opcode, attr|
+      bin_regstr = attr[:bin].dup
+      bin_regstr.gsub!(/\s/, '')
+      
+      tokens = bin_regstr.scan(/(?:\$\{#{VAR_NAME_REGSTR}\})|./)
+      tokens.each do |token|
+        if token == 'x'
+          token.sub!('x', DONT_CARE_CHAR)
+        end
+      end
+      
+      var_names = bin_regstr.scan(/\$\{#{VAR_NAME_REGSTR}\}/)
+      var_names.each do |var_name|
+        var_name.sub!('${', '')
+        var_name.sub!('}', '')
+        bitnum = @vars[var_name][:bitnum]
+        bin_regstr.sub!('${' + var_name + '}', '(' + '[01]' * bitnum + ')')
+      end
+      bin_regstr = '^' + bin_regstr + '$'
+      bin_regstr.gsub!('_', '')
+      bit_groups = bin_regstr.scan(/(?:x+|.)/)
+      bit_groups.each do |bit|
+        if bit =~ /^x+$/
+          bin_regstr.sub!(bit, '[01]' * bit.length)
+        end
+      end
+      attr[:bin_regstr] = bin_regstr
+      attr[:bin_regexp] = /#{bin_regstr}/
+    end
+  end
+  
+  
+  ######## FOR DEBUG ###########################################
+  def debug_output_vars
+    return if not ($debug_mode and DEBUG_ARCH_VARS)
+    
+    rows = Array.new
+    @vars.each do |var_name, attr|
+      rows << [var_name, attr[:bitnum], attr[:sign], attr[:label], attr[:jump], attr[:asm_radix], attr[:bin_radix]]
+    end
+    print table_format('ARCH VARS', ['var', 'bitnum', 'sign', 'label', 'jump', 'asm_radix', 'bin_radix'], rows, :inspect => true)
+  end
+  
+  
+  def debug_output_var_order
+    return if not ($debug_mode and DEBUG_ARCH_VAR_ORDER)
+    
+    rows = Array.new
+    @opcodes.each do |opcode, attr|
+      rows << [opcode, attr[:asm_var_order], attr[:bin_var_order]]
+    end
+    print table_format('ARCH VAR ORDER', ['opcode', 'asm', 'bin'], rows, :inspect => true)
+  end
+  
+  
+  def debug_output_asm_opcodes
+    return if not ($debug_mode and DEBUG_ARCH_ASM_OPCODE)
+    
+    rows = Array.new
+    @opcodes.each do |opcode, attr|
+      rows << [opcode, attr[:asm], attr[:asm_regexp]]
+    end
+    print table_format('ARCH ASM OPCODE', ['opcode', 'operand', 'asm_regexp'], rows, :inspect => true)
+  end
+  
+  
+  def debug_output_bin_opcodes
+    return if not ($debug_mode and DEBUG_ARCH_BIN_OPCODE)
+    
+    rows = Array.new
+    @opcodes.each do |opcode, attr|
+      rows << [opcode, attr[:bin], attr[:bin_regexp]]
+    end
+    print table_format('ARCH BIN OPCODE', ['opcode', 'bin_format', 'bin_regexp'], rows, :inspect => true)
+  end
+  
+  
+  def debug_output_vars_template
+    return if not ($debug_mode and DEBUG_ARCH_VARS_TEMPLATE)
+    
+    rows = Array.new
+    @vars_template.each do |opcode, template|
+      rows << [opcode, template]
+    end
+    print table_format('ARCH VARS TEMPLATE', ['opcode', 'template'], rows, :inspect => true)
+  end
+end
+
+
+
+
+
+
+class AsmFile
+  ######## INITIALZE ###########################################
+  def initialize(src_filename)
+    @name       = src_filename
+    @lines      = Array.new
+    @labels     = Hash.new
+    @output_str = nil
+    
+    if not is_readable?(@name)
+      error_msg 'Source file ' + @name + ' unreadable.'
+      abort
+    end
+  end
+  
+  
+  ######## ANALYZE SOURCE FILE #################################
+  def analyze_src(fpga_format)
+    read_src(fpga_format)
+    analyze
+    set_pc
+    debug_output_analyzed_lines
+    debug_output_errors
+    register_labels
+    debug_output_labels
+    replace_labels
+    debug_output_analyzed_lines
+  end
+  
+  
+  def read_src(fpga_format)
+    debug_msg $debug_mode, 'Reading source file "' + @name + '"' + "\n"
+    
+    line_no = 1
+    open(@name, 'r') do |src|
+      src.each do |line|
+        @lines << AsmLine.new(line_no, line.chomp)
+        line_no += 1
+      end
+    end
+    
+    if fpga_format
+      @lines.delete_if do |line|
+        line.raw_str =~ /^\s*$/
+      end
+    end
+  end
+  
+  
+  def analyze
+    debug_msg $debug_mode, 'Analyzing each line' + "\n"
+    
+    @lines.each do |line|
+      line.analyze
+    end
+  end
+  
+  
+  def set_pc
+    debug_msg $debug_mode, 'Setting program counter for each instruction' + "\n"
+    
+    pc = 0
+    @lines.each do |line|
+      if line.has_inst
+        line.pc = pc
+        pc += $arch.pc_incr
+      end
+    end
+  end
+  
+  
+  def register_labels
+    debug_msg $debug_mode, 'Registering labels' + "\n"
+    
+    dup_labels = Array.new
+    @lines.each do |line|
+      if line.label == nil
+        next
+      end
+      if line.opcode == nil
+        warning_msg 'Label at line ' + line.no.to_s + ' was ignored, since line has no opcode.'
+        next
+      end
+      if @labels.has_key? line.label
+        dup_labels << line.label
+      end
+      @labels[line.label] = {:pc => line.pc, :line_no => line.no}
+    end
+    
+    if dup_labels.empty?
+      return
+    end
+    
+    dup_labels.uniq!
+    warning_msg 'Duplicated label(s) found:'
+    dup_labels.each do |label_name|
+      empty_msg2 '  ' + label_name + ' refers pc ' + labels[label_name][:pc].to_s
+    end
+  end
+  
+  
+  def replace_labels
+    debug_msg $debug_mode, 'Replacing label(s) with program counter(s)' + "\n"
+    
+    unknown_labels = Array.new
+    @lines.each do |line|
+      line.replace_label(@labels, unknown_labels)
+    end
+    if unknown_labels.size > 0
+      error_msg 'Unknown label(s) used: '
+      unknown_labels.each do |label_attr|
+        empty_msg2 '  line ' + label_attr[:line_no].to_s + ': ' + label_attr[:label_name]
+      end
+    end
+  end
+  
+  
+  ######## OUTPUT ##############################################
+  def dump_assemble_result(dst_filename, with_src)
+    make_bin
+    debug_output_bin
+    make_output_str(with_src)
+    output_errors(dst_filename)
+    dump_to(dst_filename)
+  end
+  
+  
+  def make_bin
+    debug_msg $debug_mode, 'Making binary code' + "\n"
+    
+    @lines.each do |line|
+      line.make_bin
+    end
+  end
+  
+  
+  def make_output_str(with_src)
+    debug_msg $debug_mode, 'Making output string' + "\n"
+    
+    if with_src
+      rows = Array.new
+      @lines.each do |line|
+        rows << [line.bin, ' ' + VERILOG_COMMENT_MARK + ' ' + line.pc.to_s, ': ' + line.raw_str]
+      end
+      @output_str = table_format(nil, ['', '', ''], rows,
+                                 :margin_top => 0,    :margin_bottom => 0,     :margin_left   => 0,
+                                 :space_num  => 1,    :inspect       => false, 
+                                 :no_title   => true, :no_header     => true,  :no_table_line => true)
+    else
+      @output_str = ''
+      @lines.each do |line|
+        @output_str << line.bin + "\n"
+      end
+    end
+  end
+  
+  
+  def output_errors(dst_filename)
+    debug_msg $debug_mode, 'Outputting erros(s)' + "\n"
+    
+    error_lines = Array.new
+    @lines.each do |line|
+      if line.error
+        error_lines << line.error_msg
+      end
+    end
+    
+    error_lines.flatten!
+    if error_lines.size > 0
+      error_msg 'Error(s) found.'
+      error_lines.each do |line|
+        empty_msg2 '  ' + line
+      end
+      empty_msg2 'See output file "' + dst_filename + '" and find "E" for the error(s).'
+    end
+  end
+  
+  
+  def dump_to(dst_filename)
+    debug_msg $debug_mode, 'Outputting binary code to "' + dst_filename + '"' + "\n"
+    
+    if not is_writable?(dst_filename)
+      error_msg 'Not writable file "' + dst_filename + '" for destination.'
+      abort
+    end
+    open(dst_filename, 'w') do |dst|
+      dst.print @output_str
+    end
+  end
+  
+  
+  ######## FOR DEBUG ###########################################
+  def debug_output_analyzed_lines
+    return if not ($debug_mode and DEBUG_SOURCE_LINES)
+    
+    rows = Array.new
+    @lines.each do |line|
+      rows << [line.no, line.pc, line.raw_str, line.opcode, line.vars, line.has_inst, line.error]
+    end
+    print table_format('ASM SOURCE ANALYZED LINES', ['line_no', 'pc', 'raw_str', 'opcode', 'vars', 'has_inst', 'error'], rows, :inspect => true)
+  end
+  
+  
+  def debug_output_errors
+    return if not ($debug_mode and DEBUG_SOURCE_ERRORS)
+    
+    rows = Array.new
+    @lines.each do |line|
+      rows << [line.no, line.error, line.error_msg]
+    end
+    print table_format('ASM SOURCE ERRORS', ['line_no', 'error', 'error_msg'], rows, :inspect => true)
+  end
+  
+  
+  def debug_output_labels
+    return if not ($debug_mode and DEBUG_SOURCE_LABELS)
+    
+    rows = Array.new
+    @labels.each do |label, attr|
+      rows << [label, attr[:pc], attr[:line_no]]
+    end
+    print table_format('ASM SOURCE LABELS', ['name', 'pc', 'line_no'], rows, :inspect => true)
+  end
+  
+  
+  def debug_output_bin
+    return if not ($debug_mode and DEBUG_SOURCE_BIN)
+    
+    rows = Array.new
+    @lines.each do |line|
+      rows << [line.no, line.pc, line.raw_str, line.bin]
+    end
+    print table_format('ASM SOURCE BIN', ['line_no', 'pc', 'raw_str', 'bin'], rows, :inspect => true)
+  end
+end
+
+
+
+
+
+
+class AsmLine
+  attr_reader   :error, :error_msg, :no, :raw_str, :label, :opcode, :vars, :has_inst, :bin
+  attr_accessor :pc
+  
+  ######## INITIALIZE ##########################################
+  def initialize(line_no, line)
+    @error      = false
+    @error_msg  = Array.new
+    @no         = line_no
+    @pc         = nil
+    @raw_str    = line.sub("\t", ' ' * SOURCE_TAB_SIZE)
+    
+    @label      = nil
+    @comment    = ''
+    @opcode     = nil
+    @vars       = nil
+    @has_inst   = false
+    
+    @bin        = ''
+  end
+  
+  
+  ######## ANALYZE SOURCE FILE #################################
+  def analyze
+    str = @raw_str.dup
+    
+    ## ANALYZE LABEL ##
+    str =~ ANALYZE_LABEL_REGEXP
+    @label = $1
+    str.sub!(ANALYZE_LABEL_REGEXP, '')
+    str.sub!(/^\s*/, '')
+    
+    ## ANALYZE COMMENT ##
+    str =~ ANALYZE_COMMENT_REGEXP
+    @comment = $1
+    str.sub!(ANALYZE_COMMENT_REGEXP, '')
+    str.sub!(/\s*$/, '')
+    
+    ## ANALYZE OPCODE ##
+    if str =~ /^\s*$/
+      @has_inst  = false
+      @error     = false
+      return
+    end
+    str =~ ANALYZE_OPCODE_REGEXP
+    @opcode = $1
+    str.sub!(ANALYZE_OPCODE_REGEXP, '')
+    str.sub!(/^\s*/, '')
+    if $arch.opcodes.has_key? @opcode
+      @has_inst  = true
+    elsif @opcode == nil
+      @has_inst  = false
+      @error     = true
+      @error_msg << 'line ' + @no.to_s + ': No opcode found.'
+      return
+    else
+      @has_inst  = false
+      @error     = true
+      @error_msg << 'line ' + @no.to_s + ': Unknown opcode found: ' + @opcode
+      return
+    end
+    
+    ## ANALYZE OPERANDS ##
+    str =~ $arch.opcodes[@opcode][:asm_regexp]
+    if Regexp.last_match == nil
+      @has_inst  = false
+      @error     = true
+      @error_msg << 'line ' + @no.to_s + ': Improper format.'
+      return
+    end
+    operands = Regexp.last_match.captures
+    @vars    = $arch.vars_template[@opcode].dup
+    $arch.opcodes[@opcode][:asm_var_order].each_index do |i|
+      var_name = $arch.opcodes[@opcode][:asm_var_order][i]
+      @vars[var_name] = operands[i]
+    end
+  end
+  
+  
+  ######## REPLACE LABEL #######################################
+  def replace_label(labels, unknown_labels)
+    if @error or (not @has_inst) or (@vars.size == 0)
+      return
+    end
+    
+    @vars.each do |var_name, val|
+      if val =~ TOKEN_LABEL_REGEXP
+        if labels.has_key? val
+          case $arch.vars[var_name][:jump]
+          when TOKEN_ABSOLUTE_REGEXP
+            @vars[var_name] = ($arch.absolute_branch_address(@pc, labels[val][:pc])).to_s
+          when TOKEN_RELATIVE_REGEXP
+            @vars[var_name] = ($arch.relative_branch_address(@pc, labels[val][:pc])).to_s
+          end
+        else
+          unknown_labels << {:label_name => val, :line_no => @no}
+        end
+      end
+    end
+  end
+  
+  
+  ######## MAKE OUTPUT STRING ##################################
+  def make_bin
+    if @error
+      @bin = 'E' * $arch.line_bitnum
+      return
+    end
+    if not @has_inst
+      @bin = ''
+      return
+    end
+    
+    @bin = $arch.opcodes[@opcode][:bin].dup
+    tokens = @bin.scan(/(?:\$\{#{VAR_NAME_REGSTR}\})|./)
+    tokens.each do |token|
+      if token == 'x'
+        token.sub!('x', DONT_CARE_CHAR)
+      end
+    end
+    @bin = tokens.join('')
+    
+    @vars.each do |var_name, val|
+      bitnum = $arch.vars[var_name][:bitnum]
+      sign   = $arch.vars[var_name][:sign  ]
+      val_bin = to_bin(val, :sign    => sign,  :bitnum       => bitnum, :warn_msg         => false,
+                            :err_msg => false, :err_overflow => true,   :err_neg_unsigned => true)
+      case val_bin
+      when 'err_improper_value'
+        @error = true
+        @error_msg << 'line ' + @no.to_s + ': Improper value format: ' + val
+        @bin.gsub!('${' + var_name + '}', 'E' * bitnum)
+      when 'err_bit_overflow'
+        @error = true
+        @error_msg << 'line ' + @no.to_s + ': Bit overflow: ' + val + ' (for ' + bitnum.to_s + 'bit(s))'
+        @bin.gsub!('${' + var_name + '}', 'E' * bitnum)
+      when 'err_neg_unsigned'
+        @error = true
+        @error_msg << 'line ' + @no.to_s + ': Not unsigned value: ' + val
+        @bin.gsub!('${' + var_name + '}', 'E' * bitnum)
+      else
+        @bin.gsub!('${' + var_name + '}', val_bin)
+      end
+    end
+  end
+end
+
+
+
+
+
+
+class BinFile
+  ######## INITIALIZE ##########################################
+  def initialize(src_filename)
+    @name       = src_filename
+    @lines      = Array.new
+    @output_str = nil
+    
+    if not is_readable?(@name)
+      error_msg 'Binary file ' + @name + ' unreadable.'
+      abort
+    end
+  end
+  
+  
+  ######## ANALYZE SOURCE FILE #################################
+  def analyze_src(fpga_format)
+    read_src(fpga_format)
+    analyze
+    check_line_bitnums
+    set_pc
+  end
+  
+  
+  def read_src(fpga_format)
+    debug_msg $debug_mode, 'Reading source file "' + @name + '"' + "\n"
+    
+    line_no = 1
+    open(@name, 'r') do |src|
+      src.each do |line|
+        @lines << BinLine.new(line_no, line.chomp)
+        line_no += 1
+      end
+    end
+
+    if fpga_format
+      @lines.delete_if do |line|
+        line.raw_str =~ /^\s*$/
+      end
+    end
+  end
+  
+  
+  # raw_str, comment, bin_str, opcode, has_inst, vars
+  def analyze
+    debug_msg $debug_mode, 'Analyzing each line' + "\n"
+    
+    @lines.each do |line|
+      line.analyze
+    end
+  end
+  
+  
+  def check_line_bitnums
+    debug_msg $debug_mode, 'Checking bitnum of each line.' + "\n"
+    
+    bitnums = Hash.new
+    @lines.each do |line|
+      if line.has_inst
+        bitnums[line.no] = line.bin_str.length
+      end
+    end
+    bitnums.delete_if do |line_no, bitnum|
+      bitnum == $arch.line_bitnum
+    end
+    if bitnums.size > 0
+      error_msg 'Bitnums of all line must be ' + $arch.line_bitnum.to_s + '.'
+      empty_msg2 '  Check following lines in "' + @name + '".'
+      error_lines = bitnums.keys.sort
+      (error_lines.size/8).times do |i|
+        empty_msg2 '  line ' + [error_lines[i * 8 + 0],
+                                error_lines[i * 8 + 1],
+                                error_lines[i * 8 + 2],
+                                error_lines[i * 8 + 3],
+                                error_lines[i * 8 + 4],
+                                error_lines[i * 8 + 5],
+                                error_lines[i * 8 + 6],
+                                error_lines[i * 8 + 7]].join(', line ')
+      end
+      exit
+    end
+  end
+  
+  
+  def set_pc
+    debug_msg $debug_mode, 'Setting program counter for each instruction' + "\n"
+    
+    pc = 0
+    @lines.each do |line|
+      if line.has_inst
+        line.pc = pc
+        pc += $arch.pc_incr
+      end
+    end
+  end
+  
+  
+  ######## OUTPUT ##############################################
+  def dump_mnemonic_result(dst_filename, with_src)
+    opcode_length = strs_max_length($arch.opcodes.keys)
+    make_asm(opcode_length)
+    debug_output_asm
+    make_output_str(with_src)
+    output_errors(dst_filename)
+    dump_to(dst_filename)
+  end
+  
+  
+  def make_asm(opcode_length)
+    debug_msg $debug_mode, 'Making mnemonic code' + "\n"
+    
+    @lines.each do |line|
+      line.make_asm(opcode_length)
+    end
+  end
+  
+  
+  def make_output_str(with_src)
+    debug_msg $debug_mode, 'Making output string' + "\n"
+    
+    if with_src
+      rows = Array.new
+      @lines.each do |line|
+        rows << [line.asm, ' ' + VERILOG_COMMENT_MARK + ' ' + line.pc.to_s, ': ' + line.raw_str]
+      end
+      @output_str = table_format(nil, ['', '', ''], rows,
+                                 :margin_top => 0,    :margin_bottom => 0,     :margin_left   => 0,
+                                 :space_num  => 1,    :inspect       => false,
+                                 :no_title   => true, :no_header     => true,  :no_table_line => true)
+    else
+      @output_str = Array.new
+      @lines.each do |line|
+        @output_str << line.bin + "\n"
+      end
+    end
+  end
+  
+  
+  def output_errors(dst_filename)
+    debug_msg $debug_mode, 'Outputting error(s)' + "\n"
+    
+    error_lines = Array.new
+    @lines.each do |line|
+      if line.error
+        error_lines << line.error_msg
+      end
+    end
+    
+    error_lines.flatten!
+    if error_lines.size > 0
+      error_msg 'Error(s) found.'
+      error_lines.each do |line|
+        empty_msg2 '  ' + line
+      end
+      empty_msg2 'See output file "' + dst_filename + '" and find "E" for the error(s).'
+    end
+  end
+  
+  
+  def dump_to(dst_filename)
+    debug_msg $debug_mode, 'Outputting asm code to "' + dst_filename + '"' + "\n"
+    
+    if not is_writable?(dst_filename)
+      error_msg 'Not writable file "' + dst_filename + '" for destination.'
+      abort
+    end
+    open(dst_filename, 'w') do |dst|
+      dst.print @output_str
+    end
+  end
+  
+  
+  ######## FOR DEBUG ###########################################
+  def debug_output_asm
+  end
+end
+
+
+
+
+
+
+class BinLine
+  attr_reader   :error, :error_msg, :no, :raw_str, :comment, :bin_str, :opcode, :vars, :has_inst, :asm
+  attr_accessor :pc, :label
+  
+  ######## INITIALIZE ##########################################
+  def initialize(line_no, str)
+    @error     = false
+    @error_msg = Array.new
+    @no        = line_no
+    @pc        = nil
+    @raw_str   = str
+    
+    @label     = nil
+    @comment   = ''
+    @bin_str   = ''
+    @opcode    = nil
+    @vars      = nil
+    @has_inst  = false
+    
+    @asm       = ''
+  end
+  
+  
+  ######## ANALZE ##############################################
+  def analyze
+    str = @raw_str.dup
+    
+    ## ANALYZE COMMENT ##
+    str =~ ANALYZE_COMMENT_REGEXP
+    @comment = $1
+    str.sub!(ANALYZE_COMMENT_REGEXP, '')
+    str.sub!(/\s*$/, '')
+    
+    ## EXTRACT SIMPLE BINARY STRING ##
+    @bin_str = str.gsub('_', '')
+    
+    ## ANALYZE OPECODE ##
+    if @bin_str =~ /^\s*$/
+      @has_inst   = false
+      @error      = false
+      return
+    end
+    $arch.opcodes.each do |opcode, attr|
+      if @bin_str =~ attr[:bin_regexp]
+        @opcode   = opcode
+        @has_inst = true
+      end
+    end
+    if @opcode == nil
+      @has_inst   = false
+      @error      = true
+      @error_msg << 'No match to instruction set.'
+      return
+    end
+    
+    ## ANALYZE OPERANDS ##
+    @bin_str =~ $arch.opcodes[@opcode][:bin_regexp]
+    operands = Regexp.last_match.captures
+    @vars = $arch.vars_template[@opcode].dup
+    $arch.opcodes[@opcode][:bin_var_order].each_index do |i|
+      var_name = $arch.opcodes[@opcode][:bin_var_order][i]
+      @vars[var_name] = operands[i]
+    end
+  end
+  
+  
+  ######## MAKE OUTPUT STRING ##################################
+  def make_asm(opcode_length)
+    if @error
+      @asm = ERROR + @error_msg
+      return
+    end
+    if not @has_inst
+      @asm = ''
+      return
+    end
+    
+    operand = $arch.opcodes[@opcode][:asm].dup
+    @vars.each do |var_name, val|
+      bitnum = $arch.vars[var_name][:bitnum   ]
+      sign   = $arch.vars[var_name][:sign     ]
+      radix  = $arch.vars[var_name][:bin_radix]
+      case radix
+      when 2
+        val_asm = '0b' + to_bin('0b' + val, :sign    => sign, :bitnum => bitnum, :warn_msg => false,
+                                            :err_msg => false, :err_overflow => true, :err_neg_unsigned => true)
+      when 8
+        val_asm = '0'  + to_oct('0b' + val, :sign    => sign, :bitnum => bitnum, :warn_msg => false,
+                                            :err_msg => false, :err_overflow => true, :err_neg_unsigned => true)
+      when 10
+        val_asm =        to_dec('0b' + val, :sign    => sign, :bitnum => bitnum, :warn_msg => false,
+                                            :err_msg => false, :err_overflow => true, :err_neg_unsigned => true)
+      when 16
+        val_asm = '0x' + to_hex('0b' + val, :sign    => sign, :bitnum => bitnum, :warn_msg => false,
+                                            :err_msg => false, :err_overflow => true, :err_neg_unsigned => true)
+      end
+      
+      # if val_asm is error, add it to error_msg, and @asm = ... return
+      if val_asm =~ /err_/
+        @error      = true
+        case val_asm
+        when 'err_improper_value'
+          @error_msg << 'Tried to transfer improper binary value to the other radix(' + radix.to_s + ').'
+        when 'err_neg_unsigned'
+          @error_msg << 'hoge'
+        when 'err_bit_overflow'
+          @error_msg << 'Bit overflowed.'
+        end
+        @asm = ERROR + @error_msg
+        return
+      end
+      operand.gsub!('${' + var_name + '}', val_asm)
+    end
+    
+    space_num = opcode_length + 2 - @opcode.length
+    @asm = @opcode + ' ' * space_num + operand
+    strs = @asm.scan(OPCODE_SPLIT_REGEXP)
+    strs.each do |str|
+      if (OPCODE_STRS.include? str) and (str =~ /^\\/)
+        @asm.sub!(str, str.gsub(/^\\/, ''))
+      end
+    end
+  end
+end
+
+
+
+
+
+
+
+def check_global_consts
+  debug_msg $debug_mode, "Checking global constant values.\n"
+  
+  error_found = false
+  var_names = {
+    :param_filename           => 'DEF_PARAM_FILENAME'      ,
+    :dst_filename             => 'DEF_DST_FILENAME'        ,
+    :pc_incr                  => 'DEF_PC_INCR'             ,
+    :head_filename            => 'DEF_HEAD_FILENAME'       ,
+    :tail_filename            => 'DEF_TAIL_FILENAME'       ,
+    :with_src                 => 'DEF_WITH_SRC'            ,
+    :numeric_bitnum           => 'DEF_NUMERIC_BITNUM'      ,
+    :numeric_sign             => 'DEF_NUMERIC_SIGN'        ,
+    :source_tab_size          => 'SOURCE_TAB_SIZE'         ,
+    :comment_mark             => 'COMMENT_MARK'            ,
+    :verilog_comment_mark     => 'VERILOG_COMMENT_MARK'    ,
+    :dont_care_char           => 'DONT_CARE_CHAR'          ,
+    
+    :debug_mode               => 'DEF_DEBUG_MODE'          ,
+    :debug_arch_vars          => 'DEBUG_ARCH_VARS'         ,
+    :debug_arch_var_order     => 'DEBUG_ARCH_VAR_ORDER'    ,
+    :debug_arch_asm_opcode    => 'DEBUG_ARCH_ASM_OPCODE'   ,
+    :debug_arch_bin_opcode    => 'DEBUG_ARCH_BIN_OPCODE'   ,
+    :debug_arch_vars_tamplate => 'DEBUG_ARCH_VARS_TEMPLATE',
+    :debug_source_lines       => 'DEBUG_SOURCE_LINES'      ,
+    :debug_source_errors      => 'DEBUG_SOURCE_ERRORS'     ,
+    :debug_source_labels      => 'DEBUG_SOURCE_LABELS'     ,
+    :debug_source_bin         => 'DEBUG_SOURCE_BIN'
+  }
+  defined = {
+    :param_filename           => (defined? DEF_PARAM_FILENAME      ),
+    :dst_filename             => (defined? DEF_DST_FILENAME        ),
+    :pc_incr                  => (defined? DEF_PC_INCR             ),
+    :head_filename            => (defined? DEF_HEAD_FILENAME       ),
+    :tail_filename            => (defined? DEF_TAIL_FILENAME       ),
+    :with_src                 => (defined? DEF_WITH_SRC            ),
+    :numeric_bitnum           => (defined? DEF_NUMERIC_BITNUM      ),
+    :numeric_sign             => (defined? DEF_NUMERIC_SIGN        ),
+    :source_tab_size          => (defined? SOURCE_TAB_SIZE         ),
+    :comment_mark             => (defined? COMMENT_MARK            ),
+    :verilog_comment_mark     => (defined? VERILOG_COMMENT_MARK    ),
+    :dont_care_char           => (defined? DONT_CARE_CHAR          ),
+    :debug_mode               => (defined? DEF_DEBUG_MODE          ),
+    :debug_arch_vars          => (defined? DEBUG_ARCH_VARS         ),
+    :debug_arch_var_order     => (defined? DEBUG_ARCH_VAR_ORDER    ),
+    :debug_arch_asm_opcode    => (defined? DEBUG_ARCH_ASM_OPCODE   ),
+    :debug_arch_bin_opcode    => (defined? DEBUG_ARCH_BIN_OPCODE   ),
+    :debug_arch_vars_tamplate => (defined? DEBUG_ARCH_VARS_TEMPLATE),
+    :debug_source_lines       => (defined? DEBUG_SOURCE_LINES      ),
+    :debug_source_errors      => (defined? DEBUG_SOURCE_ERRORS     ),
+    :debug_source_labels      => (defined? DEBUG_SOURCE_LABELS     ),
+    :debug_source_bin         => (defined? DEBUG_SOURCE_BIN        )
+  }
+  var_names.each do |var, var_name|
+    if not defined[var]
+      error_msg 'Global constant value "' + var_name + '" not defined.'
+      error_found = true
+    end
+  end
+  if error_found
+    exit
+  end
+  
+  cleared = {
+    :param_filename           =>  ((DEF_PARAM_FILENAME   .is_a? String       ) and (DEF_PARAM_FILENAME  .length  > 0         )),
+    :dst_filename             =>  ((DEF_DST_FILENAME     .is_a? String       ) and (DEF_DST_FILENAME    .length  > 0         )),
+    :pc_incr                  =>   (DEF_PC_INCR          .is_a? Integer      )                                                 ,
+    :head_filename            => (((DEF_HEAD_FILENAME    .is_a? String       ) and (DEF_HEAD_FILENAME   .length  > 0         )) or (DEF_HEAD_FILENAME == nil)),
+    :tail_filename            => (((DEF_TAIL_FILENAME    .is_a? String       ) and (DEF_TAIL_FILENAME   .length  > 0         )) or (DEF_TAIL_FILENAME == nil)),
+    :with_src                 =>  ((DEF_WITH_SRC             == true         ) or  (DEF_WITH_SRC                == false     )),
+    :numeric_bitnum           =>  ((DEF_NUMERIC_BITNUM   .is_a? Integer      ) and (DEF_NUMERIC_BITNUM           > 1         )),
+    :numeric_sign             =>  ((DEF_NUMERIC_SIGN =~ TOKEN_SIGNED_REGEXP  ) or  (DEF_NUMERIC_SIGN =~ TOKEN_UNSIGNED_REGEXP)),
+    :source_tab_size          =>  ((SOURCE_TAB_SIZE      .is_a? Integer      ) and (SOURCE_TAB_SIZE              > 0         )),
+    :comment_mark             =>  ((COMMENT_MARK         .is_a? String       ) and (COMMENT_MARK        .length  > 0         )),
+    :verilog_comment_mark     =>  ((VERILOG_COMMENT_MARK .is_a? String       ) and (VERILOG_COMMENT_MARK.length  > 0         )),
+    :dont_care_char           =>  ((DONT_CARE_CHAR       .is_a? String       ) and (DONT_CARE_CHAR      .length == 1         )),
+    
+    :debug_mode               =>  ((DEF_DEBUG_MODE           == true         ) or  (DEF_DEBUG_MODE              == false     )),
+    :debug_arch_vars          =>  ((DEBUG_ARCH_VARS          == true         ) or  (DEBUG_ARCH_VARS             == false     )),
+    :debug_arch_var_order     =>  ((DEBUG_ARCH_VAR_ORDER     == true         ) or  (DEBUG_ARCH_VAR_ORDER        == false     )),
+    :debug_arch_asm_opcode    =>  ((DEBUG_ARCH_ASM_OPCODE    == true         ) or  (DEBUG_ARCH_ASM_OPCODE       == false     )),
+    :debug_arch_bin_opcode    =>  ((DEBUG_ARCH_BIN_OPCODE    == true         ) or  (DEBUG_ARCH_BIN_OPCODE       == false     )),
+    :debug_arch_vars_tamplate =>  ((DEBUG_ARCH_VARS_TEMPLATE == true         ) or  (DEBUG_ARCH_VARS_TEMPLATE    == false     )),
+    :debug_source_lines       =>  ((DEBUG_SOURCE_LINES       == true         ) or  (DEBUG_SOURCE_LINES          == false     )),
+    :debug_source_errors      =>  ((DEBUG_SOURCE_ERRORS      == true         ) or  (DEBUG_SOURCE_ERRORS         == false     )),
+    :debug_source_labels      =>  ((DEBUG_SOURCE_LABELS      == true         ) or  (DEBUG_SOURCE_LABELS         == false     )),
+    :debug_source_bin         =>  ((DEBUG_SOURCE_BIN         == true         ) or  (DEBUG_SOURCE_BIN            == false     ))
+  }
+  err_strs = {
+    :param_filename           => 'Global constant value "DEF_PARAM_FILENAME" must be a String with at least one char. : '   + DEF_PARAM_FILENAME      .inspect,
+    :dst_filename             => 'Global constant value "DEF_DST_FILENAME" must be a String with at least one char. : '     + DEF_DST_FILENAME        .inspect,
+    :pc_incr                  => 'Global constant value "DEF_PC_INCR" must be an Integer. : '                               + DEF_PC_INCR             .inspect,
+    :head_filename            => 'Global constant value "DEF_HEAD_FILENAME" must be a String with at least one char. : '    + DEF_HEAD_FILENAME       .inspect,
+    :tail_filename            => 'Global constant value "DEF_TAIL_FILENAME" must be a String with at least one char. : '    + DEF_TAIL_FILENAME       .inspect,
+    :with_src                 => 'Global constant value "DEF_WITH_SRC" must be true or false. : '                           + DEF_WITH_SRC            .inspect,
+    :numeric_bitnum           => 'Global constant value "DEF_NUMERIC_BITNUM" must be an Integer greater than 1. : '         + DEF_NUMERIC_BITNUM      .inspect,
+    :numeric_sign             => 'Global constant value "DEF_NUMERIC_SIGN" must be \'signed\' or \'unsigned\'. : '          + DEF_NUMERIC_SIGN        .inspect,
+    :source_tab_size          => 'Global constant value "SOURCE_TAB_SIZE" must be an Integer greater than 0. : '            + SOURCE_TAB_SIZE         .inspect,
+    :comment_mark             => 'Global constant value "COMMENT_MARK" must be a String with at least one char. : '         + COMMENT_MARK            .inspect,
+    :verilog_comment_mark     => 'Global constant value "VERILOG_COMMENT_MARK" must be a String with at least one char. : ' + VERILOG_COMMENT_MARK    .inspect,
+    :dont_care_char           => 'Global constant value "DONT_CARE_CHAR" must be a String with one char length. : '         + DONT_CARE_CHAR          .inspect,
+    
+    :debug_mode               => 'Global constant value "DEF_DEBUG_MODE" must be true or false. : '                         + DEF_DEBUG_MODE          .inspect,
+    :debug_arch_vars          => 'Global constant value "DEBUG_ARCH_VARS" must be true or false. : '                        + DEBUG_ARCH_VARS         .inspect,
+    :debug_arch_var_order     => 'Global constant value "DEBUG_ARCH_VAR_ORDER" must be true or false. : '                   + DEBUG_ARCH_VAR_ORDER    .inspect,
+    :debug_arch_asm_opcode    => 'Global constant value "DEBUG_ARCH_ASM_OPCODE" must be true or false. : '                  + DEBUG_ARCH_ASM_OPCODE   .inspect,
+    :debug_arch_bin_opcode    => 'Global constant value "DEBUG_ARCH_BIN_OPCODE" must be true or false. : '                  + DEBUG_ARCH_BIN_OPCODE   .inspect,
+    :debug_arch_vars_tamplate => 'Global constant value "DEBUG_ARCH_VARS_TEMPLATE" must be true or false. : '               + DEBUG_ARCH_VARS_TEMPLATE.inspect,
+    :debug_source_lines       => 'Global constant value "DEBUG_SOURCE_LINES" must be true or false. : '                     + DEBUG_SOURCE_LINES      .inspect,
+    :debug_source_errors      => 'Global constant value "DEBUG_SOURCE_ERRORS" must be true or false. : '                    + DEBUG_SOURCE_ERRORS     .inspect,
+    :debug_source_labels      => 'Global constant value "DEBUG_SOURCE_LABELS" must be true or false. : '                    + DEBUG_SOURCE_LABELS     .inspect,
+    :debug_source_bin         => 'Global constant value "DEBUG_SOURCE_BIN" must be true or false. : '                       + DEBUG_SOURCE_BIN        .inspect
+  }
+  
+  var_names.each do |var, var_name|
+    if not cleared[var]
+      error_msg err_strs[var]
+      error_found = true
+    end
+  end
+  if error_found
+    exit
+  end
+end
+
+
+def check_global_vars
+  debug_msg $debug_mode, "Checking global variables.\n"
+  
+  error_found = false
+  var_names = {
+    :debug_mode     => '$debug_mode',
+    :numeric_bitnum => '$numeric_bitnum',
+    :numeric_sign   => '$numeric_sign'
+  }
+  defined = {
+    :debug_mode     => (defined? $debug_mode    ),
+    :numeric_bitnum => (defined? $numeric_bitnum),
+    :numeric_sign   => (defined? $numeric_sign  )
+  }
+  var_names.each do |var, var_name|
+    if not defined[var]
+      error_msg 'Global variable "' + var_name + '" not defined.'
+      error_found = true
+    end
+  end
+  if error_found
+    exit
+  end
+  
+  cleared = {
+    :debug_mode     => (($debug_mode        == true               ) or  ($debug_mode     == false                )),
+    :numeric_bitnum => (($numeric_bitnum.is_a? Integer            ) and ($numeric_bitnum  > 1                    )),
+    :numeric_sign   => (($numeric_sign      =~ TOKEN_SIGNED_REGEXP) or  ($numeric_sign   =~ TOKEN_UNSIGNED_REGEXP))
+  }
+  err_strs = {
+    :debug_mode     => 'Global variable "$debug_mode" must be true or false. : '                 + $debug_mode    .inspect,
+    :numeric_bitnum => 'Global variable "$numeric_bitnum" must be an Integer greater than 1. : ' + $numeric_bitnum.inspect,
+    :numeric_sign   => 'Global variable "$numeric_sign" must be \'signed\' or \'unsigned\'. : '  + $numeric_sign  .inspect
+  }
+  
+  var_names.each do |var, var_name|
+    if not cleared[var]
+      error_msg err_strs[var]
+      error_found = true
+    end
+  end
+  if error_found
+    exit
+  end
+end
+
+
+def check_arch_params(param_filename)
+  debug_msg $debug_mode, "Checking arch params.\n"
+  
+  error_found = false
+  
+  if not defined? $arch
+    error_msg 'Global variable "$arch" not defined.'
+    error_found = true
+  elsif not ($arch.is_a? Arch)
+    error_msg 'Global variable "$arch" must be an instance of Arch class. : ' + $arch.class.inspect
+    empty_msg2 '  Make instance variable of Arch class at the end of "' + param_filename + '".'
+    error_found = true
+  end
+  if error_found
+    exit
+  end
+  
+  ########
+  if not (($arch.name.is_a? String) and ($arch.name.length > 0))
+    error_msg '$arch.name must be a String with at least one char. : ' + $arch.name.inspect
+    error_found = true
+  end
+  if not ($arch.pc_incr.is_a? Integer)
+    error_msg '$arch.pc_incr must be an Integer. : ' + $arch.pc_incr.inspect
+    error_found = true
+  end
+  if not ($arch.vars.is_a? Hash)
+    error_msg '$arch.vars must be a Hash. : ' + $arch.vars.class.inspect
+    error_found = true
+  end
+  if not ($arch.opcodes.is_a? Hash)
+    error_msg '$arch.opcodes must be a Hash : ' + $arch.vars.class.inspect
+    error_found = true
+  end
+  if not ((defined? $arch.absolute_branch_address) == 'method')
+    error_msg '$arch.absolute_branch_address must be defined as a method of ' + $arch.name + '.'
+    error_found = true
+  end
+  if not ((defined? $arch.relative_branch_address) == 'method')
+    error_msg '$arch.relative_branch_address must be defined as a method of ' + $arch.name + '.'
+    error_found = true
+  end
+  if error_found
+    exit
+  end
+  
+  ########
+  $arch.vars.each do |var, attr|
+    if not ((var.is_a? String) and (var.length > 0))
+      error_msg 'Keys(names) of $arch.vars must be a String with at least one char. : ' + var.inspect
+      error_found = true
+    end
+    if var =~ /\s/
+      error_msg 'Keys(names) of $arch.vars cannot include space. : ' + var.inspect
+      error_found = true
+    end
+    if not attr.is_a? Hash
+      error_msg 'Attributes of $arch.vars must be a Hash, but not ' + attr.class.inspect
+      error_found = true
+    end
+  end
+  $arch.opcodes.each do |opcode, attr|
+    if not ((opcode.is_a? String) and (opcode.length > 0))
+      error_msg 'Keys(names) of $arch.opcodes must be a String with at least one char. : ' + opcode.inspect
+      error_found = true
+    end
+    if opcode =~ /\s/
+      error_msg 'Keys(names) of $arch.opcodes cannot include space. : ' + opcode.inspect
+      error_found = true
+    end
+    if not attr.is_a? Hash
+      error_msg 'Attributes of $arch.opcodes must be a Hash, but not ' + attr.class.inspect
+      error_found = true
+    end
+  end
+  if error_found
+    exit
+  end
+  
+  ########
+  $arch.vars.each do |var, attr|
+    missing_attr = Array.new
+    missing_attr << ':bitnum'    if not attr.has_key? :bitnum
+    missing_attr << ':sign'      if not attr.has_key? :sign
+    missing_attr << ':label'     if not attr.has_key? :label
+    missing_attr << ':jump'      if not attr.has_key? :jump
+    missing_attr << ':asm_radix' if not attr.has_key? :asm_radix
+    missing_attr << ':bin_radix' if not attr.has_key? :bin_radix
+    if missing_attr.size > 0
+      error_msg 'Following attribute(s) missing in $arch.vars[\'' + var + '\'] : ', '  ' + missing_attr.join(', ')
+      empty_msg2 '  Check $arch.vars[\'' + var + '\'] in "' + param_filename + '".'
+      error_found = true
+    end
+  end
+  $arch.opcodes.each do |opcode, attr|
+    missing_attr = Array.new
+    missing_attr << ':asm' if not attr.has_key? :asm
+    missing_attr << ':bin' if not attr.has_key? :bin
+    if missing_attr.size > 0
+      error_msg 'Following attribute(s) missing in $arch.opcodes[\'' + opcode + '\'] : ', '  ' + missing_attr.join(', ')
+      empty_msg2 '  Check $arch.opcodes[\'' + opcode + '\'] in "' + param_filename + '".'
+      error_found = true
+    end
+  end
+  if error_found
+    exit
+  end
+  
+  ########
+  $arch.vars.each do |var, attr|
+    if not ((attr[:bitnum].is_a? Integer) and (attr[:bitnum] > 0))
+      error_msg '$arch.vars[\'' + var + '\'][:bitnum] must be an Integer greater than 0 : ' + $arch.vars[var][:bitnum].inspect
+      error_found = true
+    end
+    if not ((attr[:sign] =~ TOKEN_SIGNED_REGEXP) or (attr[:sign] =~ TOKEN_UNSIGNED_REGEXP))
+      error_msg '$arch.vars[\'' + var + '\'][:sign] must be \'signed\' or \'unsigned\' : ' + $arch.vars[var][:sign].inspect
+      error_found = true
+    end
+    if ((attr[:bitnum] == 1) and (attr[:sign] =~ TOKEN_SIGNED_REGEXP))
+      info_msg '$arch.vars[\'' + var + '\'][:sign] is changed to \'unsigned\' since its bitnum is 1bit.' + "\n"
+      attr[:sign] = 'unsigned'
+    end
+    if not ((attr[:label] == true) or (attr[:label] == false))
+      error_msg '$arch.vars[\'' + var + '\'][:label] must be true or false : ' + $arch.vars[var][:label].inspect
+      error_found = true
+    end
+    if not ((attr[:jump] =~ TOKEN_RELATIVE_REGEXP) or (attr[:jump] =~ TOKEN_ABSOLUTE_REGEXP) or (attr[:jump] == nil))
+      error_msg '$arch.vars[\'' + var + '\'][:jump] must be \'relative\', \'absolute\' or nil : ' + $arch.vars[var][:jump].inspect
+      error_found = true
+    end
+    if not ((attr[:asm_radix].is_a? Integer) and
+              ((attr[:asm_radix] == 2 ) or (attr[:asm_radix] == 8 ) or
+                 (attr[:asm_radix] == 10) or (attr[:asm_radix] == 16)) or
+            (attr[:asm_radix] == nil))
+      error_msg '$arch.vars[\'' + var + '\'][:asm_radix] must be 2, 8, 10, 16 or nil : ' + $arch.vars[var][:asm_radix].inspect
+      error_found = true
+    end
+    if not ((attr[:bin_radix].is_a? Integer) and
+              ((attr[:bin_radix] == 2) or (attr[:bin_radix] == 8) or
+                 (attr[:bin_radix] == 10) or (attr[:bin_radix] == 16)))
+      error_msg '$arch.vars[\'' + var + '\'][:bin_radix] must be 2, 8, 10 or 16 : ' + $arch.vars[var][:bin_radix].inspect
+      error_found = true
+    end
+  end
+  $arch.opcodes.each do |opcode, attr|
+    if not (attr[:asm].is_a? String)
+      error_msg '$arch.opcodes[\'' + opcode + '\'][:asm] must be a String : ', '  ' + $arch.opcodes[opcode][:asm].inspect
+      error_found = true
+    end
+    if not (attr[:bin].is_a? String)
+      error_msg '$arch.opcodes[\'' + opcode + '\'][:bin] must be a String : ', '  ' + $arch.opcodes[opcode][:bin].inspect
+      error_found = true
+    end
+  end
+  if error_found
+    exit
+  end
+  
+  ########
+  $arch.opcodes.each do |opcode, attr|
+    strs = attr[:asm].scan(OPCODE_SPLIT_REGEXP)
+    strs.each do |str|
+      if not ((str =~ /\$\{#{VAR_NAME_REGSTR}\}/) or (str =~ /\w/) or (str =~ /\s/) or (OPCODE_STRS.include? str))
+        error_msg '$arch.opcodes[\'' + opcode + '\'][:asm] improper format : ' + $arch.opcodes[opcode][:asm].inspect
+        error_found = true
+        break
+      end
+    end
+    strs = attr[:bin].scan(OPCODE_SPLIT_REGEXP)
+    strs.each do |str|
+      if not ((str =~ /\$\{#{VAR_NAME_REGSTR}\}/) or (str =~ /\w/) or (str =~ /\s/) or (OPCODE_STRS.include? str))
+        error_msg '$arch.opcodes[\'' + opcode + '\'][:bin] improper fomat.', '  ' + $arch.opcodes[opcode][:bin].inspect
+        error_found = true
+        break
+      end
+    end
+  end
+  
+  if error_found 
+    exit
+  end
+  
+  ########
+  if not $arch.absolute_branch_address(0, 0).is_a? Integer
+    error_msg '$arch.absolute_branch_address method not defined or returning improper value.'
+    error_found = true
+  end
+  if not $arch.relative_branch_address(0, 0).is_a? Integer
+    error_msg '$arch.relative_branch_address method not defined or returning improper value.'
+    error_found = true
+  end
+  
+  if error_found
+    exit
+  end
+end
+
+
+
+
+
+
+def is_readable?(filename)
+  return ((File.readable? filename) and (not File.directory?(filename)))
+end
+
+
+def is_writable?(filename)
+  return ((File.writable? filename) or (not File.exist? filename))
+end
+
+def is_directory?(dirname)
+  return File.directory?(filename)
+end
+
+
+def get_lines_of(filename)
+  if not is_readable?(filename)
+    return nil
+  else
+    lines = Array.new
+    open(filename, 'r') do |src|
+      src.each do |line|
+        lines << line.chomp
+      end
+    end
+    return lines
+  end
+end
+
+
+def strs_max_length(strs)
+  max_length = 0
+  strs.each do |str|
+    if max_length < str.length
+      max_length = str.length
+    end
+  end
+  
+  return max_length
+end
+
+
+
+
+
+
+ProcessOptions = Struct.new(:exec_mode,     :param_filename, :src_filename, :dst_filename,
+                             :head_filename, :tail_filename,  :with_src,
+                             :a2b, :a2o, :a2d, :a2h, :fpga_format, :addons)
+
+def read_cmdline
+  opt_parser = OptParser.new('amn', 'p:', 'o:', 'b:', 'h:', 't:', 'no_src', 's:',
+                             'a2b', 'a2o', 'a2d', 'a2h', 'fpga', 'addon:',
+                             'help', 'version', 'history', 'debug')
+  opts = opt_parser.analyze!(ARGV)
+  improper_opts = ARGV.dup
+  improper_opts.delete_if do |opt|
+    (opt !~ /^-/) or (opt =~ /^-\d+$/)
+  end
+  
+  if improper_opts.size > 0
+    error_msg('Improper options found in cmdline.', '  ' + improper_opts.join(', '));
+    abort
+  end
+  
+  if opts['debug'].first
+    $debug_mode = true
+  end
+  
+  if opts['help'].first
+    usage_msg
+    abort
+  end
+  if opts['version'].first
+    version_msg
+    abort
+  end
+  if opts['history'].first
+    history_msg
+    abort
+  end
+  
+  if opts['b'].first
+    if opts['b'].first !~ /^\d+$/ or opts['b'].first.to_i < 2
+      warning_msg 'Option "-b" ignored. "' + opts['b'].first + '" is not an integer greater than or equal to 2.'
+    else
+      $numeric_bitnum = opts['b'].first.to_i
+    end
+  end
+  
+  if opts['s'].first
+    case opts['s'].first
+    when TOKEN_SIGNED_REGEXP
+      $numeric_sign = 'signed'
+    when TOKEN_UNSIGNED_REGEXP
+      $numeric_sign = 'unsigned'
+    else
+      warning_msg 'Option "-s" ignored. "' + opts['s'].first + '" is not "signed" or "unsigned".'
+    end
+  end
+  
+  proc_opts = ProcessOptions.new
+  proc_opts[:head_filename ] = (opts['h']     .first) ?   opts['h'     ].first : DEF_HEAD_FILENAME
+  proc_opts[:tail_filename ] = (opts['t']     .first) ?   opts['t'     ].first : DEF_TAIL_FILENAME
+  proc_opts[:with_src      ] = (opts['no_src'].first) ? ! opts['no_src'].first : DEF_WITH_SRC
+  proc_opts[:param_filename] = (opts['p']     .first) ?   opts['p'     ].first : DEF_PARAM_FILENAME
+  proc_opts[:dst_filename  ] = (opts['o']     .first) ?   opts['o'     ].first : DEF_DST_FILENAME
+  
+  proc_opts[:exec_mode] = 'assemble'
+  if opts['m'].first
+    proc_opts[:exec_mode] = 'mnemonic'
+  end
+  if opts['a'].first
+    opts['a2b'] << true
+    opts['a2o'] << true
+    opts['a2d'] << true
+    opts['a2h'] << true
+    proc_opts[:exec_mode] = 'ascii_to_num'
+  end
+  if opts['a2b'].first or opts['a2o'].first or opts['a2d'].first or opts['a2h'].first
+    proc_opts[:exec_mode] = 'ascii_to_num'
+  end
+  if opts['n'].first
+    proc_opts[:exec_mode] = 'numeric'
+  end
+  proc_opts[:a2b] = opts['a2b']
+  proc_opts[:a2o] = opts['a2o']
+  proc_opts[:a2d] = opts['a2d']
+  proc_opts[:a2h] = opts['a2h']
+  
+  
+  case proc_opts[:exec_mode]
+  when 'numeric'
+    debug_msg $debug_mode, "Executing shapa with numerical mode\n"
+  when 'ascii_to_num'
+    debug_msg $debug_mode, "Executing shapa with ascii_to_num mode\n"
+  when 'assemble'
+    debug_msg $debug_mode, "Executing shapa with assemble mode\n"
+    if not is_readable?(File.dirname($0) + '/' + proc_opts[:param_filename])
+      error_msg 'Parameter file "' + proc_opts[:param_filename] + '" unreadable.'
+      abort
+    end
+    if ARGV.empty?
+      error_msg 'Source file name missing in cmdline.'
+      abort
+    end
+    proc_opts[:src_filename] = ARGV.shift
+    if not ARGV.empty?
+      warning_msg 'Extra argument(s) found in cmdline, and was/were ignored: ', ARGV.join(', ')
+    end
+  when 'mnemonic'
+    debug_msg $debug_mode, "Executing shapa with to_mnemonic mode\n"
+    if not is_readable?(File.dirname($0) + '/' + proc_opts[:param_filename])
+      error_msg 'Parameter file "' + proc_opts[:param_filename] + '" unreadable.'
+      abort
+    end
+    if ARGV.empty?
+      error_msg 'Binary file name missing in cmdline.'
+      abort
+    end
+    proc_opts[:src_filename] = ARGV.shift
+    if not ARGV.empty?
+      warning_msg 'Extra argument(s) found in cmdline, and was/were ignored: ', ARGV.join(', ')
+    end
+  else
+    bug_msg 'Unexpected execution mode: ' + exec_mode
+    abort
+  end
+  
+  proc_opts[:fpga_format] = opts['fpga'  ].first
+  proc_opts[:addons     ] = opts['addons']
+  
+  return proc_opts
+end
+
+
+def set_fpga_format(opts)
+  return if not opts[:fpga_format]
+  
+  opts[:with_src] = false
+  
+  $arch.opcodes.each do |opcode, attr|
+    vars = Array.new
+    
+    while attr[:bin] =~ /\$\{(#{VAR_NAME_REGSTR})\}/
+      vars << $1
+      attr[:bin].sub!(/\$\{(#{VAR_NAME_REGSTR})\}/, '${}')
+    end
+    attr[:bin].gsub!('_', '')
+    vars.each do |var|
+      attr[:bin].sub!('${}', '${' + var + '}')
+    end
+  end
+end
+
+
+
+
+
+check_global_consts
+check_global_vars
+opts = read_cmdline
+
+case opts[:exec_mode]
+when 'numeric'
+  print numeric_table_format(ARGV, $numeric_bitnum, $numeric_sign)
+when 'ascii_to_num'
+  print ascii2num_table_format(ARGV, :bin => opts[:a2b], :oct => opts[:a2o], :dec => opts[:a2d], :hex => opts[:a2h])
+when 'assemble'
+  load File.dirname($0) + '/' + opts[:param_filename]
+  check_arch_params(opts[:param_filename])
+  set_fpga_format(opts)
+  $arch.set_attr(opts[:exec_mode])
+  asm = AsmFile.new(opts[:src_filename])
+  asm.analyze_src(opts[:fpga_format])
+  asm.dump_assemble_result(opts[:dst_filename], opts[:with_src])
+when 'mnemonic'
+  load File.dirname($0) + '/' + opts[:param_filename]
+  check_arch_params(opts[:param_filename])
+  set_fpga_format(opts)
+  $arch.set_attr(opts[:exec_mode])
+  bin = BinFile.new(opts[:src_filename])
+  bin.analyze_src(opts[:fpga_format])
+  bin.dump_mnemonic_result(opts[:dst_filename], opts[:with_src])
+else
+  bug_msg 'Unexpected exec_mode "' + opts[:exec_mode] + '".'
+end
